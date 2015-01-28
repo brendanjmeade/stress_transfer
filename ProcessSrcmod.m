@@ -133,49 +133,58 @@ mu = 0.25;
 alpha = (lambda+mu) / (lambda+2*mu);
 
 
-% Loop over observation coordinates and calculate displacements and stresses for each
-for i = 1:numel(xvec)
-    % Translate and (un)rotate observation coordinates
-    xtemp = xvec(i)-S(1).x1;
-    ytemp = yvec(i)-S(1).y1;
-    R = [cosd(-S(1).angle) , -sind(-S(1).angle) ; sind(-S(1).angle) , cosd(-S(1).angle)];
-    posTemp = R*[xtemp ; ytemp];
-    xtemp = posTemp(1);
-    ytemp = posTemp(2);
+for iPatch = 1:numel(S)
+% Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
+    for iObs = 1:numel(xvec)
+        % Translate and (un)rotate observation coordinates
+        xtemp = xvec(iObs)-S(iPatch).x1;
+        ytemp = yvec(iObs)-S(iPatch).y1;
+        R = [cosd(-S(iPatch).angle) , -sind(-S(iPatch).angle) ; sind(-S(iPatch).angle) , cosd(-S(iPatch).angle)];
+        posTemp = R*[xtemp ; ytemp];
+        xtemp = posTemp(1);
+        ytemp = posTemp(2);
     
-    % Calculate elastic deformation
-    % Seven arguments to DC3DWrapper are required:
-    % alpha = (lambda + mu) / (lambda + 2 * mu)
-    % xo = 3-vector representing the observation point (x, y, z in the original)
-    % depth = the depth of the fault origin
-    % dip = the dip-angle of the rectangular dislocation surface
-    % strike_width = the along-strike range of the surface (al1,al2 in the original)
-    % dip_width = the along-dip range of the surface (aw1, aw2 in the original)
-    % dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
-    [success, u, uGrad] = DC3Dwrapper(alpha, ...
-                                      [xtemp, ytemp, zvec(i)], ...
-                                      S(1).z3, S(1).dip, ...
-                                      [0, S(1).length], ...
-                                      [0, S(1).width], ...
-                                      [1.0, 0.0, 0.0]);
-    ux(i) = u(1);
-    uy(i) = u(2);
-    uz(i) = u(3);
-    sxx = uGrad(1, 1);
-    sxy = 0.5*(uGrad(1, 2) + uGrad(2, 1));
-    sxz = 0.5*(uGrad(1, 3) + uGrad(3, 1));
-    syy = uGrad(2, 2);
-    syz = 0.5*(uGrad(2, 3) + uGrad(3, 2));
-    szz = uGrad(3, 3);
+        % Calculate elastic deformation using Okada's method
+        % Seven arguments to DC3DWrapper are required:
+        % alpha = (lambda + mu) / (lambda + 2 * mu)
+        % xo = 3-vector representing the observation point (x, y, z in the original)
+        % depth = the depth of the fault origin
+        % dip = the dip-angle of the rectangular dislocation surface
+        % strike_width = the along-strike range of the surface (al1,al2 in the original)
+        % dip_width = the along-dip range of the surface (aw1, aw2 in the original)
+        % dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
+        [success, u, uGrad] = DC3Dwrapper(alpha, ...
+                                          [xtemp, ytemp, zvec(iObs)], ...
+                                          S(iPatch).z3, S(iPatch).dip, ...
+                                          [0, S(iPatch).length], ...
+                                          [0, S(iPatch).width], ...
+                                          [1.0, 0.0, 0.0]);
+        ux(iObs) = ux(iObs) + u(1);
+        uy(iObs) = uy(iObs) + u(2);
+        uz(iObs) = uz(iObs) + u(3);
+        sxx(iObs) = sxx(iObs) + uGrad(1, 1);
+        sxy(iObs) = sxy(iObs) + 0.5*(uGrad(1, 2) + uGrad(2, 1));
+        sxz(iObs) = sxz(iObs) + 0.5*(uGrad(1, 3) + uGrad(3, 1));
+        syy(iObs) = syy(iObs) + uGrad(2, 2);
+        syz(iObs) = syz(iObs) + 0.5*(uGrad(2, 3) + uGrad(3, 2));
+        szz(iObs) = szz(iObs) + uGrad(3, 3);
+    end
 end
 
 uxmat = reshape(ux, size(xmat));
 uymat = reshape(uy, size(xmat));
 uzmat = reshape(uz, size(xmat));
+sxxmat = reshape(uz, size(xmat));
+sxymat = reshape(uz, size(xmat));
+sxzmat = reshape(uz, size(xmat));
+syymat = reshape(uz, size(xmat));
+syzmat = reshape(uz, size(xmat));
+szzmat = reshape(szz, size(xmat));
+
 uHorizontalMag = sqrt(uxmat.^2 + uymat.^2);
 
 % Plot a horizontal slice showing the magnitude of the horizontal displacement field
-sh = surf(xmat, ymat, -5*ones(size(uxmat)), log10(uHorizontalMag));
+sh = surf(xmat, ymat, -zvec(1)*ones(size(uxmat)), log10(uHorizontalMag));
 set(sh, 'EdgeColor', 'none');
 set(sh, 'FaceAlpha', 0.85)
 colormap(flipud(hot(20)));
