@@ -11,49 +11,49 @@ cm2m = 1e-2; % Convert centimeters to meters
 
 % Load the .mat (HDF5-ish) version of the model geometry and slip distribution
 F = load(strcat(faultName, '.mat'));
-F = F.s1999HECTOR01SALI;
+eval(sprintf('F = F.%s;', faultName));
 
 % Count how many panels there are
 names = fieldnames(F);
-nPanels = 0;
-for i = 1:numel(names)
-    currentField = char(names(i));
+nPanel = 0;
+for iNames = 1:numel(names)
+    currentField = char(names(iNames));
     if numel(currentField) == 8
         if strcmp(currentField(5:8), 'geoZ')
-            nPanels = nPanels + 1;
+            nPanel = nPanel + 1;
         end
     end
 end
 
 % Extract the fault geometry and slip into a single stucture of ungrouped patches
 patchCount = 0;
-for k = 1:nPanels
+for iPanel = 1:nPanel
     % Extract geometric parameters from this panel common to all patches
-    eval(sprintf('strike = F.seg%dAStke;', k));
+    eval(sprintf('strike = F.seg%dAStke;', iPanel));
     angle = -(strike-90);
     angle(angle<0) = angle(angle<0)+360;
-    eval(sprintf('L = F.seg%dDimWL(2)/size(F.seg%dgeoX, 2);', k, k));
-    eval(sprintf('W = F.seg%dDimWL(2)/size(F.seg%dgeoX, 1);', k, k));
+    eval(sprintf('L = F.seg%dDimWL(2)/size(F.seg%dgeoX, 2);', iPanel, iPanel));
+    eval(sprintf('W = F.seg%dDimWL(2)/size(F.seg%dgeoX, 1);', iPanel, iPanel));
     temp = [cosd(angle), -sind(angle); sind(angle), cosd(angle)]*[L/2; 0];
     xTopOffset = temp(1);
     yTopOffset = temp(2);
     zTopOffset = 0;
-    eval(sprintf('xTopBottomOffset = F.seg%dgeoX(2, 1) - F.seg%dgeoX(1, 1);', k, k));
-    eval(sprintf('yTopBottomOffset = F.seg%dgeoY(2, 1) - F.seg%dgeoY(1, 1);', k, k));
-    eval(sprintf('zTopBottomOffset = F.seg%dgeoZ(2, 1) - F.seg%dgeoZ(1, 1);', k, k));
+    eval(sprintf('xTopBottomOffset = F.seg%dgeoX(2, 1) - F.seg%dgeoX(1, 1);', iPanel, iPanel));
+    eval(sprintf('yTopBottomOffset = F.seg%dgeoY(2, 1) - F.seg%dgeoY(1, 1);', iPanel, iPanel));
+    eval(sprintf('zTopBottomOffset = F.seg%dgeoZ(2, 1) - F.seg%dgeoZ(1, 1);', iPanel, iPanel));
 
     % For current panel get the number patches down-dip and along strike
-    eval(sprintf('[nDownDip, nAlongStrike] = size(F.seg%dgeoX);', k));
+    eval(sprintf('[nDownDip, nAlongStrike] = size(F.seg%dgeoX);', iPanel));
 
     % Loops over the down-dip and along-strike patches of the current panel
-    for i = 1:nDownDip
-        for j = 1:nAlongStrike
+    for iDownDip = 1:nDownDip
+        for iAlongStrike = 1:nAlongStrike
             patchCount = patchCount + 1;
             
             % Extract top center coordinates of current patch
-            eval(sprintf('xTopCenter = F.seg%dgeoX(i, j);', k));
-            eval(sprintf('yTopCenter = F.seg%dgeoY(i, j);', k));
-            eval(sprintf('zTopCenter = F.seg%dgeoZ(i, j);', k));
+            eval(sprintf('xTopCenter = F.seg%dgeoX(iDownDip, iAlongStrike);', iPanel));
+            eval(sprintf('yTopCenter = F.seg%dgeoY(iDownDip, iAlongStrike);', iPanel));
+            eval(sprintf('zTopCenter = F.seg%dgeoZ(iDownDip, iAlongStrike);', iPanel));
             
             % Calculate location of top corners
             S(patchCount).x1 = xTopCenter + xTopOffset;
@@ -72,12 +72,12 @@ for k = 1:nPanels
             S(patchCount).z4 = zTopCenter + zTopBottomOffset - zTopOffset;
             
             % Extract fault slip
-            eval(sprintf('S(patchCount).slip = F.seg%dSLIP(i, j);', k));
+            eval(sprintf('S(patchCount).slip = F.seg%dSLIP(iDownDip, iAlongStrike);', iPanel));
 
             % Extract patch dip, strike, width, and length
-            eval(sprintf('S(patchCount).dip = F.seg%dDipAn;', k));
-            eval(sprintf('S(patchCount).strike = F.seg%dAStke;', k));
-            eval(sprintf('S(patchCount).rake = F.seg%dRAKE;', k));
+            eval(sprintf('S(patchCount).dip = F.seg%dDipAn;', iPanel));
+            eval(sprintf('S(patchCount).strike = F.seg%dAStke;', iPanel));
+            eval(sprintf('S(patchCount).rake = F.seg%dRAKE;', iPanel));
             
             S(patchCount).angle = angle;
             S(patchCount).width = W;
@@ -117,8 +117,8 @@ nColors = 256;
 cmap = flipud(gray(nColors));
 
 % Loop over all of the fault patches and plot
-for i = 1:numel(S)
-    slipColorIdx = round((S(i).slip - slipMin)/slipDiff * nColors);
+for iPatch = 1:numel(S)
+    slipColorIdx = round((S(iPatch).slip - slipMin)/slipDiff * nColors);
     if slipColorIdx < 1
         slipColorIdx = 1;
     end
@@ -127,8 +127,8 @@ for i = 1:numel(S)
     end
     
     % Plot the individual fault patches
-    fh = fill3([S(i).x1 S(i).x2 S(i).x4 S(i).x3], [S(i).y1 S(i).y2 S(i).y4 S(i).y3], -[S(i).z1 S(i).z2 S(i).z4 S(i).z3], 'y');
-    set(fh, 'FaceColor', cmap(slipColorIdx, :))
+    fh = fill3([S(iPatch).x1 S(iPatch).x2 S(iPatch).x4 S(iPatch).x3], [S(iPatch).y1 S(iPatch).y2 S(iPatch).y4 S(iPatch).y3], -[S(iPatch).z1 S(iPatch).z2 S(iPatch).z4 S(iPatch).z3], 'y');
+    set(fh, 'FaceColor', cmap(slipColorIdx, :));
 end
 
 % Add labels and set axes properties
