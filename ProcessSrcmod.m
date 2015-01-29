@@ -1,6 +1,15 @@
 close all;
 clear all;
+
+% Variables for read in and the elastic calculation
 faultName = 's1999HECTOR01SALI';
+N = 100; % number of grid points in x and y-directions for visualization
+lambda = 0.25; % first Lame parameter
+mu = 0.25; % Shear modulus
+km2m = 1e3; % Convert kilometers to meters
+cm2m = 1e-2; % Convert centimeters to meters
+
+% Load the .mat (HDF5-ish) version of the model geometry and slip distribution
 F = load(strcat(faultName, '.mat'));
 F = F.s1999HECTOR01SALI;
 
@@ -16,6 +25,7 @@ for i = 1:numel(names)
     end
 end
 
+% Extract the fault geometry and slip into a single stucture of ungrouped patches
 patchCount = 0;
 for k = 1:nPanels
     % Extract geometric parameters from this panel common to all patches
@@ -67,10 +77,30 @@ for k = 1:nPanels
             % Extract patch dip, strike, width, and length
             eval(sprintf('S(patchCount).dip = F.seg%dDipAn;', k));
             eval(sprintf('S(patchCount).strike = F.seg%dAStke;', k));
+            eval(sprintf('S(patchCount).rake = F.seg%dRAKE;', k));
+            
             S(patchCount).angle = angle;
             S(patchCount).width = W;
             S(patchCount).length = L;
             
+            % Convert all distance measurements from kilometers to meters
+            S(patchCount).x1 = S(patchCount).x1 * km2m;
+            S(patchCount).x2 = S(patchCount).x2 * km2m;
+            S(patchCount).x3 = S(patchCount).x3 * km2m;
+            S(patchCount).x4 = S(patchCount).x4 * km2m;
+            S(patchCount).y1 = S(patchCount).y1 * km2m;
+            S(patchCount).y2 = S(patchCount).y2 * km2m;
+            S(patchCount).y3 = S(patchCount).y3 * km2m;
+            S(patchCount).y4 = S(patchCount).y4 * km2m;
+            S(patchCount).z1 = S(patchCount).z1 * km2m;
+            S(patchCount).z2 = S(patchCount).z2 * km2m;
+            S(patchCount).z3 = S(patchCount).z3 * km2m;
+            S(patchCount).z4 = S(patchCount).z4 * km2m;
+            S(patchCount).width = S(patchCount).width * km2m;
+            S(patchCount).length = S(patchCount).length * km2m;
+            
+            % Convert slip from centimeters to meters
+            S(patchCount).slip = S(patchCount).slip * cm2m;
         end
     end
 end
@@ -79,14 +109,15 @@ end
 figure;
 hold on;
 
+% Pick a fill color proportional to slip magnitude
+slipMin = min([S.slip]);
+slipMax = max([S.slip]);
+slipDiff = slipMax - slipMin;
+nColors = 256;
+cmap = flipud(gray(nColors));
+
 % Loop over all of the fault patches and plot
 for i = 1:numel(S)
-    % pick a fill color proportional to slip magnitude
-    slipMin = min([S.slip]);
-    slipMax = max([S.slip]);
-    slipDiff = slipMax - slipMin;
-    nColors = 256;
-    cmap = flipud(gray(nColors));
     slipColorIdx = round((S(i).slip - slipMin)/slipDiff * nColors);
     if slipColorIdx < 1
         slipColorIdx = 1;
@@ -100,21 +131,18 @@ for i = 1:numel(S)
     set(fh, 'FaceColor', cmap(slipColorIdx, :))
 end
 
-
 % Add labels and set axes properties
 axis equal;
 box on;
-xlabel('x (km)');
-ylabel('y (km)');
-zlabel('z (km)');
+xlabel('x (m)');
+ylabel('y (m)');
+zlabel('z (m)');
 view(3);
 cameratoolbar;
-camproj('perspective');
 
 % Calculate elastic displacement field associated with one fault patch
-N = 100;
-xvec = linspace(-50, 50, N);
-yvec = linspace(-50, 50, N);
+xvec = linspace(-50*km2m, 50*km2m, N);
+yvec = linspace(-50*km2m, 50*km2m, N);
 [xmat, ymat] = meshgrid(xvec, yvec);
 xvec = xmat(:);
 yvec = ymat(:);
@@ -128,10 +156,7 @@ sxz = zeros(size(xvec));
 syy = zeros(size(xvec));
 syz = zeros(size(xvec));
 szz = zeros(size(xvec));
-lambda = 0.25;
-mu = 0.25;
 alpha = (lambda+mu) / (lambda+2*mu);
-
 
 for iPatch = 1:numel(S)
 % Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
@@ -158,7 +183,7 @@ for iPatch = 1:numel(S)
                                           S(iPatch).z3, S(iPatch).dip, ...
                                           [0, S(iPatch).length], ...
                                           [0, S(iPatch).width], ...
-                                          [1.0, 0.0, 0.0]);
+                                          [S(iPatch).slip, 0.0, 0.0]);
         ux(iObs) = ux(iObs) + u(1);
         uy(iObs) = uy(iObs) + u(2);
         uz(iObs) = uz(iObs) + u(3);
@@ -180,7 +205,6 @@ sxzmat = reshape(uz, size(xmat));
 syymat = reshape(uz, size(xmat));
 syzmat = reshape(uz, size(xmat));
 szzmat = reshape(szz, size(xmat));
-
 uHorizontalMag = sqrt(uxmat.^2 + uymat.^2);
 
 % Plot a horizontal slice showing the magnitude of the horizontal displacement field
@@ -188,13 +212,9 @@ sh = surf(xmat, ymat, -zvec(1)*ones(size(uxmat)), log10(uHorizontalMag));
 set(sh, 'EdgeColor', 'none');
 set(sh, 'FaceAlpha', 0.85)
 colormap(flipud(hot(20)));
-camva(45);
-campos([-143.5170  -87.9473   80.5196]);
-axis tight
+axis tight;
 
-% Add a custom colorbar
+% Add a small colorbar
 ch = colorbar('horizontal');
 set(ch, 'Position', [0.05 0.05 0.2 0.01]);
-%set(get(ch, 'Title'), 'String', 'log_{10} (u_x^2 + u_y^2)^{1/2}')
-%set(get(ch, 'Title'), 'VerticalAlignment', 'bottom');
 
