@@ -6,6 +6,7 @@ faultName = 's1999HECTOR01SALI';
 N = 100; % number of grid points in x and y-directions for visualization
 lambda = 0.25; % first Lame parameter
 mu = 0.25; % Shear modulus
+coefficientOfFriction = 0.4; % Coefficient of friction
 km2m = 1e3; % Convert kilometers to meters
 cm2m = 1e-2; % Convert centimeters to meters
 
@@ -156,6 +157,7 @@ sxz = zeros(size(xvec));
 syy = zeros(size(xvec));
 syz = zeros(size(xvec));
 szz = zeros(size(xvec));
+cfs = zeros(size(xvec));
 alpha = (lambda+mu) / (lambda+2*mu);
 
 for iPatch = 1:numel(S)
@@ -193,6 +195,30 @@ for iPatch = 1:numel(S)
         syy(iObs) = syy(iObs) + uGrad(2, 2);
         syz(iObs) = syz(iObs) + 0.5*(uGrad(2, 3) + uGrad(3, 2));
         szz(iObs) = szz(iObs) + uGrad(3, 3);
+        
+        % Resolve Coulomb failure stresses on reciever plane
+        nVecInPlane = [0 1 0];
+        nVecNormal = [1 0 0];
+       
+        deltaTau = sxx(iObs) * nVecNormal(1) * nVecInPlane(1) + ...
+                   sxy(iObs) * nVecNormal(2) * nVecInPlane(1) + ...
+                   sxz(iObs) * nVecNormal(3) * nVecInPlane(1) + ...
+                   sxy(iObs) * nVecNormal(1) * nVecInPlane(2) + ...
+                   syy(iObs) * nVecNormal(2) * nVecInPlane(2) + ...
+                   syz(iObs) * nVecNormal(3) * nVecInPlane(2) + ...
+                   sxz(iObs) * nVecNormal(1) * nVecInPlane(3) + ...
+                   syz(iObs) * nVecNormal(2) * nVecInPlane(3) + ...
+                   szz(iObs) * nVecNormal(3) * nVecInPlane(3);
+        deltaSigma = sxx(iObs) * nVecNormal(1) * nVecNormal(1) + ...
+                     sxy(iObs) * nVecNormal(2) * nVecNormal(1) + ...
+                     sxz(iObs) * nVecNormal(3) * nVecNormal(1) + ...
+                     sxy(iObs) * nVecNormal(1) * nVecNormal(2) + ...
+                     syy(iObs) * nVecNormal(2) * nVecNormal(2) + ...
+                     syz(iObs) * nVecNormal(3) * nVecNormal(2) + ...
+                     sxz(iObs) * nVecNormal(1) * nVecNormal(3) + ...
+                     syz(iObs) * nVecNormal(2) * nVecNormal(3) + ...
+                     szz(iObs) * nVecNormal(3) * nVecNormal(3);
+        cfs(iObs) = deltaTau - coefficientOfFriction * deltaSigma;
     end
 end
 
@@ -205,10 +231,11 @@ sxzmat = reshape(uz, size(xmat));
 syymat = reshape(uz, size(xmat));
 syzmat = reshape(uz, size(xmat));
 szzmat = reshape(szz, size(xmat));
-uHorizontalMag = sqrt(uxmat.^2 + uymat.^2);
+cfsmat = reshape(cfs, size(xmat));
+uhorizontalmag = sqrt(uxmat.^2 + uymat.^2);
 
-% Plot a horizontal slice showing the magnitude of the horizontal displacement field
-sh = surf(xmat, ymat, -zvec(1)*ones(size(uxmat)), log10(uHorizontalMag));
+% plot a horizontal slice showing the magnitude of the horizontal displacement field
+sh = surf(xmat, ymat, -zvec(1)*ones(size(uxmat)), cfsmat);
 set(sh, 'EdgeColor', 'none');
 set(sh, 'FaceAlpha', 0.85)
 colormap(flipud(hot(20)));
