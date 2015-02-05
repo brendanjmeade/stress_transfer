@@ -9,6 +9,8 @@ mu = 0.25; % Shear modulus
 coefficientOfFriction = 0.4; % Coefficient of friction
 km2m = 1e3; % Convert kilometers to meters
 cm2m = 1e-2; % Convert centimeters to meters
+cfsUpperLimit = 5e-5; % for visualziation purposes
+cfsLowerLimit = -5e-5; % for visualization purposes
 
 % Load the .mat (HDF5-ish) version of the model geometry and slip distribution
 F = load(strcat(faultName, '.mat'));
@@ -142,30 +144,30 @@ view(3);
 cameratoolbar;
 
 % Calculate elastic displacement field associated with one fault patch
-xvec = linspace(-50*km2m, 50*km2m, N);
-yvec = linspace(-50*km2m, 50*km2m, N);
-[xmat, ymat] = meshgrid(xvec, yvec);
-xvec = xmat(:);
-yvec = ymat(:);
-zvec = 0.0*ones(size(xvec));
-ux = zeros(size(xvec));
-uy = zeros(size(xvec));
-uz = zeros(size(xvec));
-sxx = zeros(size(xvec));
-sxy = zeros(size(xvec));
-sxz = zeros(size(xvec));
-syy = zeros(size(xvec));
-syz = zeros(size(xvec));
-szz = zeros(size(xvec));
-cfs = zeros(size(xvec));
+xVec = linspace(-50*km2m, 50*km2m, N);
+yVec = linspace(-50*km2m, 50*km2m, N);
+[xMat, yMat] = meshgrid(xVec, yVec);
+xVec = xMat(:);
+yVec = yMat(:);
+zVec = 0.0*ones(size(xVec));
+ux = zeros(size(xVec));
+uy = zeros(size(xVec));
+uz = zeros(size(xVec));
+sxx = zeros(size(xVec));
+sxy = zeros(size(xVec));
+sxz = zeros(size(xVec));
+syy = zeros(size(xVec));
+syz = zeros(size(xVec));
+szz = zeros(size(xVec));
+cfs = zeros(size(xVec));
 alpha = (lambda+mu) / (lambda+2*mu);
 
 for iPatch = 1:numel(S)
 % Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
-    for iObs = 1:numel(xvec)
+    for iObs = 1:numel(xVec)
         % Translate and (un)rotate observation coordinates
-        xtemp = xvec(iObs)-S(iPatch).x1;
-        ytemp = yvec(iObs)-S(iPatch).y1;
+        xtemp = xVec(iObs)-S(iPatch).x1;
+        ytemp = yVec(iObs)-S(iPatch).y1;
         R = [cosd(-S(iPatch).angle) , -sind(-S(iPatch).angle) ; sind(-S(iPatch).angle) , cosd(-S(iPatch).angle)];
         posTemp = R*[xtemp ; ytemp];
         xtemp = posTemp(1);
@@ -181,7 +183,7 @@ for iPatch = 1:numel(S)
         % dip_width = the along-dip range of the surface (aw1, aw2 in the original)
         % dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
         [success, u, uGrad] = DC3Dwrapper(alpha, ...
-                                          [xtemp, ytemp, zvec(iObs)], ...
+                                          [xtemp, ytemp, zVec(iObs)], ...
                                           S(iPatch).z3, S(iPatch).dip, ...
                                           [0, S(iPatch).length], ...
                                           [0, S(iPatch).width], ...
@@ -222,20 +224,30 @@ for iPatch = 1:numel(S)
     end
 end
 
-uxmat = reshape(ux, size(xmat));
-uymat = reshape(uy, size(xmat));
-uzmat = reshape(uz, size(xmat));
-sxxmat = reshape(uz, size(xmat));
-sxymat = reshape(uz, size(xmat));
-sxzmat = reshape(uz, size(xmat));
-syymat = reshape(uz, size(xmat));
-syzmat = reshape(uz, size(xmat));
-szzmat = reshape(szz, size(xmat));
-cfsmat = reshape(cfs, size(xmat));
-uhorizontalmag = sqrt(uxmat.^2 + uymat.^2);
+uxMat = reshape(ux, size(xMat));
+uyMat = reshape(uy, size(xMat));
+uzMat = reshape(uz, size(xMat));
+uHorizontalMagMat = sqrt(uxMat.^2 + uyMat.^2);
+sxxMat = reshape(uz, size(xMat));
+sxyMat = reshape(uz, size(xMat));
+sxzMat = reshape(uz, size(xMat));
+syyMat = reshape(uz, size(xMat));
+syzMat = reshape(uz, size(xMat));
+szzMat = reshape(szz, size(xMat));
+
+% Clip CFS values for plotting purposes
+cfsHighIdx1 = find(cfs>cfsUpperLimit);
+cfsHighIdx2 = find(cfs>0);
+cfsHighIdx = intersect(cfsHighIdx1, cfsHighIdx2);
+cfsLowIdx1 = find(cfs<cfsLowerLimit);
+cfsLowIdx2 = find(cfs<0);
+cfsLowIdx = intersect(cfsLowIdx1, cfsLowIdx2);
+cfs(cfsHighIdx) = cfsUpperLimit;
+cfs(cfsLowIdx) = cfsLowerLimit;
+cfsMat = reshape(cfs, size(xMat));
 
 % plot a horizontal slice showing the magnitude of the horizontal displacement field
-sh = surf(xmat, ymat, -zvec(1)*ones(size(uxmat)), cfsmat);
+sh = surf(xMat, yMat, -zVec(1)*ones(size(uxMat)), cfsMat);
 set(sh, 'EdgeColor', 'none');
 set(sh, 'FaceAlpha', 0.85)
 colormap(flipud(hot(20)));
@@ -244,4 +256,4 @@ axis tight;
 % Add a small colorbar
 ch = colorbar('horizontal');
 set(ch, 'Position', [0.05 0.05 0.2 0.01]);
-
+colormap(bluewhitered);
