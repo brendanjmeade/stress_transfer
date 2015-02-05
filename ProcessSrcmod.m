@@ -9,8 +9,8 @@ mu = 0.25; % Shear modulus
 coefficientOfFriction = 0.4; % Coefficient of friction
 km2m = 1e3; % Convert kilometers to meters
 cm2m = 1e-2; % Convert centimeters to meters
-cfsUpperLimit = 5e-5; % for visualziation purposes
-cfsLowerLimit = -5e-5; % for visualization purposes
+cfsUpperLimit = 5e-6; % for visualziation purposes
+cfsLowerLimit = -5e-6; % for visualization purposes
 
 % Load the .mat (HDF5-ish) version of the model geometry and slip distribution
 F = load(strcat(faultName, '.mat'));
@@ -80,7 +80,7 @@ for iPanel = 1:nPanel
             % Extract patch dip, strike, width, and length
             eval(sprintf('S(patchCount).dip = F.seg%dDipAn;', iPanel));
             eval(sprintf('S(patchCount).strike = F.seg%dAStke;', iPanel));
-            eval(sprintf('S(patchCount).rake = F.seg%dRAKE;', iPanel));
+            eval(sprintf('S(patchCount).rake = F.seg%dRAKE(iDownDip, iAlongStrike);', iPanel));
             
             S(patchCount).angle = angle;
             S(patchCount).width = W;
@@ -104,6 +104,10 @@ for iPanel = 1:nPanel
             
             % Convert slip from centimeters to meters
             S(patchCount).slip = S(patchCount).slip * cm2m;
+            R = [cosd(S(patchCount).rake) , -sind(S(patchCount).rake) ; sind(S(patchCount).rake) , cosd(S(patchCount).rake)];
+            temp = R * [S(patchCount).slip ; 0];
+            S(patchCount).slipStrike = temp(1);
+            S(patchCount).slipDip = temp(2);
         end
     end
 end
@@ -187,7 +191,7 @@ for iPatch = 1:numel(S)
                                           S(iPatch).z3, S(iPatch).dip, ...
                                           [0, S(iPatch).length], ...
                                           [0, S(iPatch).width], ...
-                                          [S(iPatch).slip, 0.0, 0.0]);
+                                          [S(iPatch).slipStrike, S(iPatch).slipDip, 0.0]);
         ux(iObs) = ux(iObs) + u(1);
         uy(iObs) = uy(iObs) + u(2);
         uz(iObs) = uz(iObs) + u(3);
