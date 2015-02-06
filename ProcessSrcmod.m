@@ -11,6 +11,7 @@ km2m = 1e3; % Convert kilometers to meters
 cm2m = 1e-2; % Convert centimeters to meters
 cfsUpperLimit = 5e-6; % for visualziation purposes
 cfsLowerLimit = -5e-6; % for visualization purposes
+obsDepth = -5e3; % depth of observation coordinates
 
 % Load the .mat (HDF5-ish) version of the model geometry and slip distribution
 F = load(strcat(faultName, '.mat'));
@@ -153,7 +154,7 @@ yVec = linspace(-50*km2m, 50*km2m, N);
 [xMat, yMat] = meshgrid(xVec, yVec);
 xVec = xMat(:);
 yVec = yMat(:);
-zVec = 0.0*ones(size(xVec));
+zVec = obsDepth*ones(size(xVec));
 ux = zeros(size(xVec));
 uy = zeros(size(xVec));
 uz = zeros(size(xVec));
@@ -251,13 +252,13 @@ cfs(cfsLowIdx) = cfsLowerLimit;
 cfsMat = reshape(cfs, size(xMat));
 
 % plot a horizontal slice showing the magnitude of the horizontal displacement field
-sh = surf(xMat, yMat, -zVec(1)*ones(size(uxMat)), cfsMat);
+sh = surf(xMat, yMat, obsDepth*ones(size(uxMat)), cfsMat);
 set(sh, 'EdgeColor', 'none');
-set(sh, 'FaceAlpha', 0.85)
+set(sh, 'FaceAlpha', 0.65)
 colormap(flipud(hot(20)));
 axis tight;
 
 % Add a small colorbar
 ch = colorbar('horizontal');
-set(ch, 'Position', [0.05 0.05 0.2 0.01]);
+set(ch, 'Position', [0.05 0.10 0.2 0.01]);
 colormap(bluewhitered);
