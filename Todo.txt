@@ -1,0 +1,20 @@
+Todo:
+
+- Convert ProcessSrcmod.m (Matlab) to ProcessSrcmod.py (Python)
+
+- Python script to look at all SRCMOD files in current director and plot locations on the globe
+  - Download at least two geographically different SRCMOD files
+  - Find Mai's documentation on reference frames
+  - Convert from UTM (?) to global longitude and latitude
+
+- ProcessCMT (Python)
+  - Read
+  - Read in CMT sources
+  - Convert CMT to finite size rupture with Wells and Coppersmith scaling relationships
+  - How to deal with focal mechanism ambiguity
+    - Source and receiver...simple rules for this?
+
+- See what exists in the world already for the Global CMT part of the problem
+  - Are these libraries useful?
+  - https://josealvarezgomez.wordpress.com/category/software-libre-2/
+  - http://docs.obspy.org/tutorial/code_snippets/basemap_plot_with_beachballs.html
