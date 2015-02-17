@@ -9,6 +9,7 @@ Todo:
      - evLON: -116.4300 (longitude degrees)
      - evLAT: 34.2000 (latitude, degrees)
      - evDPT: 7 (depth, km?)
+     - The geometrical representation uses the top-center of each fault segment and each subfault as reference; latitude, longitude and depth for each segment/subfault are provided as well as X (EW, positive toward E) and Y (NS, positive toward N) coordinates with origin at the epicenter, computed using UTM-coordinates based on the UTM-zone of the epicenter. Hence, geometrical biases or small deviations from other sources or published images may occur if the epicenter is located close to a border of an UTM zone.
 
 - ProcessCMT (Python)
   - Read
