@@ -6,6 +6,9 @@ Todo:
   - Download at least two geographically different SRCMOD files
   - Find Mai's documentation on reference frames
   - Convert from UTM (?) to global longitude and latitude
+     - evLON: -116.4300 (longitude degrees)
+     - evLAT: 34.2000 (latitude, degrees)
+     - evDPT: 7 (depth, km?)
 
 - ProcessCMT (Python)
   - Read
