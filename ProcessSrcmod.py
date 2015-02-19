@@ -16,21 +16,19 @@ obsDepth = -5e3; # depth of observation coordinates
 # Load the .mat (HDF5-ish) version of the model geometry and slip distribution
 F = sio.loadmat(eventName + '.mat')
 F = F[eventName]
+F = F[0]
 
-# extract the coordiantes for the rectangular fault patches
-x = F[0]['seg1geoX']
-y = F[0]['seg1geoY']
-z = F[0]['seg1geoZ']
+nPanel = int(F['invSEGM'][0][0][0])
+# Extract the fault geometry and slip into a single stucture of ungrouped patches
+patchCount = 0;
+for iPanel in range(1, nPanel):
+    # Extract geometric parameters from this panel common to all patches
+    strike = 0
+    strike = F['seg' + str(iPanel) + 'AStke'][0][0][0]
+    angle = -(strike-90)
+    if angle < 0:
+        angle = angle + 360
 
-nPanel = F[0]['invSEGM'][0][0][0]
-
-# % Extract the fault geometry and slip into a single stucture of ungrouped patches
-# patchCount = 0;
-# for iPanel = 1:nPanel
-#     % Extract geometric parameters from this panel common to all patches
-#     eval(sprintf('strike = F.seg%dAStke;', iPanel));
-#     angle = -(strike-90);
-#     angle(angle<0) = angle(angle<0)+360;
 #     eval(sprintf('L = F.seg%dDimWL(2)/size(F.seg%dgeoX, 2);', iPanel, iPanel));
 #     eval(sprintf('W = F.seg%dDimWL(2)/size(F.seg%dgeoX, 1);', iPanel, iPanel));
 #     temp = [cosd(angle), -sind(angle); sind(angle), cosd(angle)]*[L/2; 0];
