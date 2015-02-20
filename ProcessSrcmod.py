@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import scipy.io as sio
 
@@ -18,8 +19,8 @@ F = sio.loadmat(eventName + '.mat')
 F = F[eventName]
 F = F[0]
 
-nPanel = int(F['invSEGM'][0][0][0])
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
+nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
 patchCount = 0;
 for iPanel in range(1, nPanel):
     # Extract geometric parameters from this panel common to all patches
@@ -29,12 +30,13 @@ for iPanel in range(1, nPanel):
     if angle < 0:
         angle = angle + 360
 
-#     eval(sprintf('L = F.seg%dDimWL(2)/size(F.seg%dgeoX, 2);', iPanel, iPanel));
-#     eval(sprintf('W = F.seg%dDimWL(2)/size(F.seg%dgeoX, 1);', iPanel, iPanel));
-#     temp = [cosd(angle), -sind(angle); sind(angle), cosd(angle)]*[L/2; 0];
-#     xTopOffset = temp(1);
-#     yTopOffset = temp(2);
-#     zTopOffset = 0;
+    # calculate the length and wide if individual patch elements in current panel
+    L = F['seg' + str(iPanel) + 'DimWL'][0][0][1] / np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[1]
+    W = F['seg' + str(iPanel) + 'DimWL'][0][0][1] / np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[0]
+    temp = [math.cos(math.degrees(angle)), -math.sin(math.degree(angle)); sind(angle), cosd(angle)]*[L/2; 0];
+    xTopOffset = temp(1);
+    yTopOffset = temp(2);
+    zTopOffset = 0;
 #     eval(sprintf('xTopBottomOffset = F.seg%dgeoX(2, 1) - F.seg%dgeoX(1, 1);', iPanel, iPanel));
 #     eval(sprintf('yTopBottomOffset = F.seg%dgeoY(2, 1) - F.seg%dgeoY(1, 1);', iPanel, iPanel));
 #     eval(sprintf('zTopBottomOffset = F.seg%dgeoZ(2, 1) - F.seg%dgeoZ(1, 1);', iPanel, iPanel));
