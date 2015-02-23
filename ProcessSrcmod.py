@@ -1,6 +1,6 @@
 import math
 import numpy as np
-import scipy.io as sio
+import scipy
 
 # load file and extract geometric coordiantes and slip distribution
 eventName = 's1999HECTOR01SALI'
@@ -15,14 +15,14 @@ cfsLowerLimit = -5e-6; # for visualization purposes
 obsDepth = -5e3; # depth of observation coordinates
 
 # Load the .mat (HDF5-ish) version of the model geometry and slip distribution
-F = sio.loadmat(eventName + '.mat')
+F = scipy.io.loadmat(eventName + '.mat')
 F = F[eventName]
 F = F[0]
 
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
 nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
 patchCount = 0;
-for iPanel in range(1, nPanel):
+for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention
     # Extract geometric parameters from this panel common to all patches
     strike = 0
     strike = F['seg' + str(iPanel) + 'AStke'][0][0][0]
@@ -33,23 +33,24 @@ for iPanel in range(1, nPanel):
     # calculate the length and wide if individual patch elements in current panel
     L = F['seg' + str(iPanel) + 'DimWL'][0][0][1] / np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[1]
     W = F['seg' + str(iPanel) + 'DimWL'][0][0][1] / np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[0]
-    temp = [math.cos(math.degrees(angle)), -math.sin(math.degree(angle)); sind(angle), cosd(angle)]*[L/2; 0];
-    xTopOffset = temp(1);
-    yTopOffset = temp(2);
+    rTemp = np.array([[math.cos(math.degrees(angle)), -math.sin(math.degrees(angle))], [math.sin(math.degrees(angle)), math.cos(math.degrees(angle))]])
+    xTempOrig = np.array([[L/2], [0]])
+    xTempRot = np.dot(rTemp, xTempOrig)
+    xTopOffset = xTempRot[0];
+    yTopOffset = xTempRot[1];
     zTopOffset = 0;
-#     eval(sprintf('xTopBottomOffset = F.seg%dgeoX(2, 1) - F.seg%dgeoX(1, 1);', iPanel, iPanel));
-#     eval(sprintf('yTopBottomOffset = F.seg%dgeoY(2, 1) - F.seg%dgeoY(1, 1);', iPanel, iPanel));
-#     eval(sprintf('zTopBottomOffset = F.seg%dgeoZ(2, 1) - F.seg%dgeoZ(1, 1);', iPanel, iPanel));
+    xTopBottomOffset = F['seg' + str(iPanel) + 'geoX'][0][1][0] - F['seg' + str(iPanel) + 'geoX'][0][0][0]
+    yTopBottomOffset = F['seg' + str(iPanel) + 'geoY'][0][1][0] - F['seg' + str(iPanel) + 'geoY'][0][0][0]
+    zTopBottomOffset = F['seg' + str(iPanel) + 'geoZ'][0][1][0] - F['seg' + str(iPanel) + 'geoZ'][0][0][0]
+    nDownDip = np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[0]
+    nAlongStrike = np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[1]
 
-#     % For current panel get the number patches down-dip and along strike
-#     eval(sprintf('[nDownDip, nAlongStrike] = size(F.seg%dgeoX);', iPanel));
-
-#     % Loops over the down-dip and along-strike patches of the current panel
-#     for iDownDip = 1:nDownDip
-#         for iAlongStrike = 1:nAlongStrike
-#             patchCount = patchCount + 1;
-            
-#             % Extract top center coordinates of current patch
+    # Loops over the down-dip and along-strike patches of the current panel
+    for iDownDip in range(1, nDownDip + 1):
+        for iAlongStrike in range(1, nAlongStrike + 1):
+            patchCount = patchCount + 1
+            print patchCount
+            # Extract top center coordinates of current patch
 #             eval(sprintf('xTopCenter = F.seg%dgeoX(iDownDip, iAlongStrike);', iPanel));
 #             eval(sprintf('yTopCenter = F.seg%dgeoY(iDownDip, iAlongStrike);', iPanel));
 #             eval(sprintf('zTopCenter = F.seg%dgeoZ(iDownDip, iAlongStrike);', iPanel));
