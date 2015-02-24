@@ -18,6 +18,7 @@ obsDepth = -5e3; # depth of observation coordinates
 F = scipy.io.loadmat(eventName + '.mat')
 F = F[eventName]
 F = F[0]
+S = [] # Empty list
 
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
 nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
@@ -46,16 +47,26 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
     nAlongStrike = np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[1]
 
     # Loops over the down-dip and along-strike patches of the current panel
-    for iDownDip in range(1, nDownDip + 1):
-        for iAlongStrike in range(1, nAlongStrike + 1):
+    for iDownDip in range(0, nDownDip):
+        for iAlongStrike in range(0, nAlongStrike):
             patchCount = patchCount + 1
             print patchCount
-            # Extract top center coordinates of current patch
-#             eval(sprintf('xTopCenter = F.seg%dgeoX(iDownDip, iAlongStrike);', iPanel));
-#             eval(sprintf('yTopCenter = F.seg%dgeoY(iDownDip, iAlongStrike);', iPanel));
-#             eval(sprintf('zTopCenter = F.seg%dgeoZ(iDownDip, iAlongStrike);', iPanel));
             
-#             % Calculate location of top corners
+            # Extract top center coordinates of current patch
+            xTopCenter = F['seg' + str(iPanel) + 'geoX'][0][iDownDip][iAlongStrike]
+            yTopCenter = F['seg' + str(iPanel) + 'geoY'][0][iDownDip][iAlongStrike]
+            zTopCenter = F['seg' + str(iPanel) + 'geoZ'][0][iDownDip][iAlongStrike]
+
+            # Calculate location of top corners
+            element = dict()
+            element['x1'] = xTopCenter + xTopOffset
+            element['y1'] = yTopCenter + yTopOffset
+            element['z1'] = zTopCenter - zTopOffset
+            element['x2'] = xTopCenter - xTopOffset
+            element['y2'] = yTopCenter - yTopOffset
+            element['z2'] = zTopCenter - zTopOffset
+            S.append(element)
+
 #             S(patchCount).x1 = xTopCenter + xTopOffset;
 #             S(patchCount).y1 = yTopCenter + yTopOffset;
 #             S(patchCount).z1 = zTopCenter - zTopOffset;
