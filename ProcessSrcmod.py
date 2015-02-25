@@ -56,7 +56,8 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
             xTopCenter = F['seg' + str(iPanel) + 'geoX'][0][iDownDip][iAlongStrike]
             yTopCenter = F['seg' + str(iPanel) + 'geoY'][0][iDownDip][iAlongStrike]
             zTopCenter = F['seg' + str(iPanel) + 'geoZ'][0][iDownDip][iAlongStrike]
-
+            topCenter = [F['seg' + str(iPanel) + 'geo' + dim][0][iDownDip][iAlongStrike] for dim in ['X', 'Y', 'Z']]
+            
             # Calculate location of top corners
             element = dict()
             element['x1'] = xTopCenter + xTopOffset
