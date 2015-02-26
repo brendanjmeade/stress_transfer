@@ -18,7 +18,7 @@ obsDepth = -5e3; # depth of observation coordinates
 F = scipy.io.loadmat(eventName + '.mat')
 F = F[eventName]
 F = F[0]
-S = [] # Empty list
+S = list() # Empty list
 
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
 nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
@@ -56,7 +56,6 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
             xTopCenter = F['seg' + str(iPanel) + 'geoX'][0][iDownDip][iAlongStrike]
             yTopCenter = F['seg' + str(iPanel) + 'geoY'][0][iDownDip][iAlongStrike]
             zTopCenter = F['seg' + str(iPanel) + 'geoZ'][0][iDownDip][iAlongStrike]
-            topCenter = [F['seg' + str(iPanel) + 'geo' + dim][0][iDownDip][iAlongStrike] for dim in ['X', 'Y', 'Z']]
             
             # Calculate location of top corners
             element = dict()
@@ -66,70 +65,60 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
             element['x2'] = xTopCenter - xTopOffset
             element['y2'] = yTopCenter - yTopOffset
             element['z2'] = zTopCenter - zTopOffset
+
+            # Calculate location of bottom corners
+            element['x3'] = xTopCenter + xTopBottomOffset + xTopOffset
+            element['y3'] = yTopCenter + yTopBottomOffset + yTopOffset
+            element['z3'] = zTopCenter + zTopBottomOffset - zTopOffset
+            element['x4'] = xTopCenter + xTopBottomOffset - xTopOffset
+            element['y4'] = yTopCenter + yTopBottomOffset - yTopOffset
+            element['z4'] = zTopCenter + zTopBottomOffset - zTopOffset
+            
+            # Extract fault slip
+            element['slip'] = F['seg' + str(iPanel) + 'SLIP'][0][iDownDip][iAlongStrike]
+
+            # Extract patch dip, strike, width, and length
+            element['dip'] = F['seg' + str(iPanel) + 'DipAn']
+            element['strike'] = F['seg' + str(iPanel) + 'AStke']
+            element['rake'] = F['seg' + str(iPanel) + 'RAKE'][0][iDownDip][iAlongStrike]
+            element['angle'] = angle
+            element['width'] = W
+            element['length'] = L
+            
+            # Convert all distance measurements from kilometers to meters
+            element['x1'] = element['x1'] * km2m
+            element['x2'] = element['x2'] * km2m
+            element['x3'] = element['x3'] * km2m
+            element['x4'] = element['x4'] * km2m
+            element['y1'] = element['y1'] * km2m
+            element['y2'] = element['y2'] * km2m
+            element['y3'] = element['y3'] * km2m
+            element['y4'] = element['y4'] * km2m
+            element['z1'] = element['z1'] * km2m
+            element['z2'] = element['z2'] * km2m
+            element['z3'] = element['z3'] * km2m
+            element['z4'] = element['z4'] * km2m
+            element['width'] = element['width'] * km2m
+            element['length'] = element['length'] * km2m
+            
+            # Convert slip from centimeters to meters
+            element['slip'] = element['slip'] * cm2m
+            rTemp = np.array([[math.cos(math.degrees(element['rake'])), -math.sin(math.degrees(element['rake']))], [math.sin(math.degrees(element['rake'])), math.cos(math.degrees(element['rake']))]])
+            xTempOrig = np.array([[element['slip']], [0]])
+            xTempRot = np.dot(rTemp, xTempOrig)
+            element['slipStrike'] = xTempRot[0]
+            element['slipDip'] = xTempRot[1]
             S.append(element)
 
-#             S(patchCount).x1 = xTopCenter + xTopOffset;
-#             S(patchCount).y1 = yTopCenter + yTopOffset;
-#             S(patchCount).z1 = zTopCenter - zTopOffset;
-#             S(patchCount).x2 = xTopCenter - xTopOffset;
-#             S(patchCount).y2 = yTopCenter - yTopOffset;
-#             S(patchCount).z2 = zTopCenter - zTopOffset;
-        
-#             % Calculate location of bottom corners
-#             S(patchCount).x3 = xTopCenter + xTopBottomOffset + xTopOffset;
-#             S(patchCount).y3 = yTopCenter + yTopBottomOffset + yTopOffset;
-#             S(patchCount).z3 = zTopCenter + zTopBottomOffset - zTopOffset;
-#             S(patchCount).x4 = xTopCenter + xTopBottomOffset - xTopOffset;
-#             S(patchCount).y4 = yTopCenter + yTopBottomOffset - yTopOffset;
-#             S(patchCount).z4 = zTopCenter + zTopBottomOffset - zTopOffset;
-            
-#             % Extract fault slip
-#             eval(sprintf('S(patchCount).slip = F.seg%dSLIP(iDownDip, iAlongStrike);', iPanel));
-
-#             % Extract patch dip, strike, width, and length
-#             eval(sprintf('S(patchCount).dip = F.seg%dDipAn;', iPanel));
-#             eval(sprintf('S(patchCount).strike = F.seg%dAStke;', iPanel));
-#             eval(sprintf('S(patchCount).rake = F.seg%dRAKE(iDownDip, iAlongStrike);', iPanel));
-            
-#             S(patchCount).angle = angle;
-#             S(patchCount).width = W;
-#             S(patchCount).length = L;
-            
-#             % Convert all distance measurements from kilometers to meters
-#             S(patchCount).x1 = S(patchCount).x1 * km2m;
-#             S(patchCount).x2 = S(patchCount).x2 * km2m;
-#             S(patchCount).x3 = S(patchCount).x3 * km2m;
-#             S(patchCount).x4 = S(patchCount).x4 * km2m;
-#             S(patchCount).y1 = S(patchCount).y1 * km2m;
-#             S(patchCount).y2 = S(patchCount).y2 * km2m;
-#             S(patchCount).y3 = S(patchCount).y3 * km2m;
-#             S(patchCount).y4 = S(patchCount).y4 * km2m;
-#             S(patchCount).z1 = S(patchCount).z1 * km2m;
-#             S(patchCount).z2 = S(patchCount).z2 * km2m;
-#             S(patchCount).z3 = S(patchCount).z3 * km2m;
-#             S(patchCount).z4 = S(patchCount).z4 * km2m;
-#             S(patchCount).width = S(patchCount).width * km2m;
-#             S(patchCount).length = S(patchCount).length * km2m;
-            
-#             % Convert slip from centimeters to meters
-#             S(patchCount).slip = S(patchCount).slip * cm2m;
-#             R = [cosd(S(patchCount).rake) , -sind(S(patchCount).rake) ; sind(S(patchCount).rake) , cosd(S(patchCount).rake)];
-#             temp = R * [S(patchCount).slip ; 0];
-#             S(patchCount).slipStrike = temp(1);
-#             S(patchCount).slipDip = temp(2);
-#         end
-#     end
-# end
-
-# % Visualize the results
+# Visualize the results
 # figure;
 # hold on;
 
-# % Pick a fill color proportional to slip magnitude
+# Pick a fill color proportional to slip magnitude
 # slipMin = min([S.slip]);
 # slipMax = max([S.slip]);
 # slipDiff = slipMax - slipMin;
-# nColors = 256;
+nColors = 256;
 # cmap = flipud(gray(nColors));
 
 # % Loop over all of the fault patches and plot
