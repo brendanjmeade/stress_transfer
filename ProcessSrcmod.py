@@ -1,10 +1,11 @@
 import math
 import numpy as np
 import scipy
+from okada_wrapper import dc3d0wrapper, dc3dwrapper
 
 # load file and extract geometric coordiantes and slip distribution
 eventName = 's1999HECTOR01SALI'
-N = 100 # Number of grid points in x and y-directions for visualization
+N = 50 # Number of grid points in x and y-directions for visualization
 lambdaLame = 0.25 # First Lame parameter
 muLame = 0.25 # shear modulus
 coefficientOfFriction = 0.4 # Coefficient of friction
@@ -22,7 +23,6 @@ S = list() # Empty list
 
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
 nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
-patchCount = 0;
 for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention
     # Extract geometric parameters from this panel common to all patches
     strike = 0
@@ -49,8 +49,6 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
     # Loops over the down-dip and along-strike patches of the current panel
     for iDownDip in range(0, nDownDip):
         for iAlongStrike in range(0, nAlongStrike):
-            patchCount = patchCount + 1
-            print patchCount
             
             # Extract top center coordinates of current patch
             xTopCenter = F['seg' + str(iPanel) + 'geoX'][0][iDownDip][iAlongStrike]
@@ -110,86 +108,53 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
             element['slipDip'] = xTempRot[1]
             S.append(element)
 
-# Visualize the results
-# figure;
-# hold on;
+# Calculate elastic displacement field associated with one fault patch
+xVec = np.linspace(-50*km2m, 50*km2m, N)
+yVec = np.linspace(-50*km2m, 50*km2m, N)
+[xMat, yMat] = np.meshgrid(xVec, yVec)
+xVec = xMat.reshape(xMat.size, 1)
+yVec = yMat.reshape(yMat.size, 1)
+zVec = obsDepth*np.ones(xVec.size)
+ux = np.zeros(xVec.size)
+uy = np.zeros(xVec.size)
+uz = np.zeros(xVec.size)
+sxx = np.zeros(xVec.size)
+sxy = np.zeros(xVec.size)
+sxz = np.zeros(xVec.size)
+syy = np.zeros(xVec.size)
+syz = np.zeros(xVec.size)
+szz = np.zeros(xVec.size)
+cfs = np.zeros(xVec.size)
+alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
 
-# Pick a fill color proportional to slip magnitude
-# slipMin = min([S.slip]);
-# slipMax = max([S.slip]);
-# slipDiff = slipMax - slipMin;
-nColors = 256;
-# cmap = flipud(gray(nColors));
+for iPatch in range(0, len(S)):
+    print iPatch
+    # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
+    for iObs in range(0, len(xVec)):
+        # Translate and (un)rotate observation coordinates
+        xTemp = xVec[iObs]-S[iPatch]['x1']
+        yTemp = yVec[iObs]-S[iPatch]['y1']
+        rTemp = np.array([[math.cos(math.degrees(-S[iPatch]['angle'])), -math.sin(math.degrees(-S[iPatch]['angle']))], [math.sin(math.degrees(-S[iPatch]['angle'])), math.cos(math.degrees(S[iPatch]['angle']))]])
+        xTempOrig = np.array([xTemp, yTemp]) # no need for brackets around x/yTemp because they are already arrays
+        xTempRot = np.dot(rTemp, xTempOrig)
+        xTemp = xTempRot[0];
+        yTemp = xTempRot[1];
 
-# % Loop over all of the fault patches and plot
-# for iPatch = 1:numel(S)
-#     slipColorIdx = round((S(iPatch).slip - slipMin)/slipDiff * nColors);
-#     if slipColorIdx < 1
-#         slipColorIdx = 1;
-#     end
-#     if slipColorIdx > nColors
-#         slipColorIdx = nColors
-#     end
-    
-#     % Plot the individual fault patches
-#     fh = fill3([S(iPatch).x1 S(iPatch).x2 S(iPatch).x4 S(iPatch).x3], [S(iPatch).y1 S(iPatch).y2 S(iPatch).y4 S(iPatch).y3], -[S(iPatch).z1 S(iPatch).z2 S(iPatch).z4 S(iPatch).z3], 'y');
-#     set(fh, 'FaceColor', cmap(slipColorIdx, :));
-# end
+        # Calculate elastic deformation using Okada's method
+        # Seven arguments to DC3DWrapper are required:
+        # alpha = (lambda + mu) / (lambda + 2 * mu)
+        # xo = 3-vector representing the observation point (x, y, z in the original)
+        # depth = the depth of the fault origin
+        # dip = the dip-angle of the rectangular dislocation surface
+        # strike_width = the along-strike range of the surface (al1,al2 in the original)
+        # dip_width = the along-dip range of the surface (aw1, aw2 in the original)
+        # dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
+        success, u, grad_u = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
+                                         S[iPatch]['z3'], S[iPatch]['dip'],
+                                         [0.0, S[iPatch]['length']],
+                                         [0.0, S[iPatch]['width']],
+                                         [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
 
-# % Add labels and set axes properties
-# axis equal;
-# box on;
-# xlabel('x (m)');
-# ylabel('y (m)');
-# zlabel('z (m)');
-# view(3);
-# cameratoolbar;
-
-# % Calculate elastic displacement field associated with one fault patch
-# xVec = linspace(-50*km2m, 50*km2m, N);
-# yVec = linspace(-50*km2m, 50*km2m, N);
-# [xMat, yMat] = meshgrid(xVec, yVec);
-# xVec = xMat(:);
-# yVec = yMat(:);
-# zVec = obsDepth*ones(size(xVec));
-# ux = zeros(size(xVec));
-# uy = zeros(size(xVec));
-# uz = zeros(size(xVec));
-# sxx = zeros(size(xVec));
-# sxy = zeros(size(xVec));
-# sxz = zeros(size(xVec));
-# syy = zeros(size(xVec));
-# syz = zeros(size(xVec));
-# szz = zeros(size(xVec));
-# cfs = zeros(size(xVec));
-# alpha = (lambda+mu) / (lambda+2*mu);
-
-# for iPatch = 1:numel(S)
-# % Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
-#     for iObs = 1:numel(xVec)
-#         % Translate and (un)rotate observation coordinates
-#         xtemp = xVec(iObs)-S(iPatch).x1;
-#         ytemp = yVec(iObs)-S(iPatch).y1;
-#         R = [cosd(-S(iPatch).angle) , -sind(-S(iPatch).angle) ; sind(-S(iPatch).angle) , cosd(-S(iPatch).angle)];
-#         posTemp = R*[xtemp ; ytemp];
-#         xtemp = posTemp(1);
-#         ytemp = posTemp(2);
-    
-#         % Calculate elastic deformation using Okada's method
-#         % Seven arguments to DC3DWrapper are required:
-#         % alpha = (lambda + mu) / (lambda + 2 * mu)
-#         % xo = 3-vector representing the observation point (x, y, z in the original)
-#         % depth = the depth of the fault origin
-#         % dip = the dip-angle of the rectangular dislocation surface
-#         % strike_width = the along-strike range of the surface (al1,al2 in the original)
-#         % dip_width = the along-dip range of the surface (aw1, aw2 in the original)
-#         % dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
-#         [success, u, uGrad] = DC3Dwrapper(alpha, ...
-#                                           [xtemp, ytemp, zVec(iObs)], ...
-#                                           S(iPatch).z3, S(iPatch).dip, ...
-#                                           [0, S(iPatch).length], ...
-#                                           [0, S(iPatch).width], ...
-#                                           [S(iPatch).slipStrike, S(iPatch).slipDip, 0.0]);
 #         ux(iObs) = ux(iObs) + u(1);
 #         uy(iObs) = uy(iObs) + u(2);
 #         uz(iObs) = uz(iObs) + u(3);
@@ -247,6 +212,42 @@ nColors = 256;
 # cfs(cfsHighIdx) = cfsUpperLimit;
 # cfs(cfsLowIdx) = cfsLowerLimit;
 # cfsMat = reshape(cfs, size(xMat));
+
+
+# Visualize the results
+# figure;
+# hold on;
+
+# Pick a fill color proportional to slip magnitude
+slipMin = min(S, key=lambda x: x['slip'])['slip']
+slipMax = max(S, key=lambda x: x['slip'])['slip']
+slipDiff = slipMax - slipMin
+nColors = 256;
+# cmap = flipud(gray(nColors));
+
+# % Loop over all of the fault patches and plot
+# for iPatch = 1:numel(S)
+#     slipColorIdx = round((S(iPatch).slip - slipMin)/slipDiff * nColors);
+#     if slipColorIdx < 1
+#         slipColorIdx = 1;
+#     end
+#     if slipColorIdx > nColors
+#         slipColorIdx = nColors
+#     end
+    
+#     % Plot the individual fault patches
+#     fh = fill3([S(iPatch).x1 S(iPatch).x2 S(iPatch).x4 S(iPatch).x3], [S(iPatch).y1 S(iPatch).y2 S(iPatch).y4 S(iPatch).y3], -[S(iPatch).z1 S(iPatch).z2 S(iPatch).z4 S(iPatch).z3], 'y');
+#     set(fh, 'FaceColor', cmap(slipColorIdx, :));
+# end
+
+# % Add labels and set axes properties
+# axis equal;
+# box on;
+# xlabel('x (m)');
+# ylabel('y (m)');
+# zlabel('z (m)');
+# view(3);
+# cameratoolbar;
 
 # % plot a horizontal slice showing the magnitude of the horizontal displacement field
 # sh = surf(xMat, yMat, obsDepth*ones(size(uxMat)), cfsMat);
