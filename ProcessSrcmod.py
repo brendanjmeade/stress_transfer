@@ -149,25 +149,24 @@ for iPatch in range(0, len(S)):
         # strike_width = the along-strike range of the surface (al1,al2 in the original)
         # dip_width = the along-dip range of the surface (aw1, aw2 in the original)
         # dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
-        success, u, grad_u = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
-                                         S[iPatch]['z3'], S[iPatch]['dip'],
-                                         [0.0, S[iPatch]['length']],
-                                         [0.0, S[iPatch]['width']],
-                                         [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
-
-#         ux(iObs) = ux(iObs) + u(1);
-#         uy(iObs) = uy(iObs) + u(2);
-#         uz(iObs) = uz(iObs) + u(3);
-#         sxx(iObs) = sxx(iObs) + uGrad(1, 1);
-#         sxy(iObs) = sxy(iObs) + 0.5*(uGrad(1, 2) + uGrad(2, 1));
-#         sxz(iObs) = sxz(iObs) + 0.5*(uGrad(1, 3) + uGrad(3, 1));
-#         syy(iObs) = syy(iObs) + uGrad(2, 2);
-#         syz(iObs) = syz(iObs) + 0.5*(uGrad(2, 3) + uGrad(3, 2));
-#         szz(iObs) = szz(iObs) + uGrad(3, 3);
+        success, u, uGrad = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
+                                        S[iPatch]['z3'], S[iPatch]['dip'],
+                                        [0.0, S[iPatch]['length']],
+                                        [0.0, S[iPatch]['width']],
+                                        [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
+        ux[iObs] = ux[iObs] + u[0]
+        uy[iObs] = uy[iObs] + u[1]
+        uz[iObs] = uz[iObs] + u[2]
+        sxx[iObs] = sxx[iObs] + uGrad[0, 0]
+        sxy[iObs] = sxy[iObs] + 0.5*(uGrad[0, 1] + uGrad[1, 0])
+        sxz[iObs] = sxz[iObs] + 0.5*(uGrad[0, 2] + uGrad[2, 0])
+        syy[iObs] = syy[iObs] + uGrad[1, 1]
+        syz[iObs] = syz[iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
+        szz[iObs] = szz[iObs] + uGrad[2, 2]
         
-#         % Resolve Coulomb failure stresses on reciever plane
-#         nVecInPlane = [0 1 0];
-#         nVecNormal = [1 0 0];
+        # Resolve Coulomb failure stresses on reciever plane
+        nVecInPlane = [0, 1, 0]
+        nVecNormal = [1, 0, 0]
        
 #         deltaTau = sxx(iObs) * nVecNormal(1) * nVecInPlane(1) + ...
 #                    sxy(iObs) * nVecNormal(2) * nVecInPlane(1) + ...
