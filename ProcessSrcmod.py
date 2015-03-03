@@ -3,9 +3,13 @@ import numpy as np
 import scipy
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
 
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.collections import PolyCollection
+import matplotlib.pyplot as plt
+
 # load file and extract geometric coordiantes and slip distribution
 eventName = 's1999HECTOR01SALI'
-N = 50 # Number of grid points in x and y-directions for visualization
+N = 10 # Number of grid points in x and y-directions for visualization
 lambdaLame = 0.25 # First Lame parameter
 muLame = 0.25 # shear modulus
 coefficientOfFriction = 0.4 # Coefficient of friction
@@ -188,57 +192,61 @@ for iPatch in range(0, len(S)):
                       szz[iObs] * nVecNormal[2] * nVecNormal[2])
         cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
 
+# Reshape vectors as plain matrices for plotting
+uxMat = np.reshape(ux, xMat.shape)
+uyMat = np.reshape(uy, xMat.shape)
+uzMat = np.reshape(uz, xMat.shape)
+uHorizontalMagMat = np.sqrt(uxMat**2.0 + uyMat**2.0);
+sxxMat = np.reshape(sxx, xMat.shape);
+sxyMat = np.reshape(sxy, xMat.shape);
+sxzMat = np.reshape(sxz, xMat.shape);
+syyMat = np.reshape(syy, xMat.shape);
+syzMat = np.reshape(syz, xMat.shape);
+szzMat = np.reshape(szz, xMat.shape);
 
-# uxMat = reshape(ux, size(xMat));
-# uyMat = reshape(uy, size(xMat));
-# uzMat = reshape(uz, size(xMat));
-# uHorizontalMagMat = sqrt(uxMat.^2 + uyMat.^2);
-# sxxMat = reshape(uz, size(xMat));
-# sxyMat = reshape(uz, size(xMat));
-# sxzMat = reshape(uz, size(xMat));
-# syyMat = reshape(uz, size(xMat));
-# syzMat = reshape(uz, size(xMat));
-# szzMat = reshape(szz, size(xMat));
-
-# % Clip CFS values for plotting purposes
-# cfsHighIdx1 = find(cfs>cfsUpperLimit);
-# cfsHighIdx2 = find(cfs>0);
-# cfsHighIdx = intersect(cfsHighIdx1, cfsHighIdx2);
-# cfsLowIdx1 = find(cfs<cfsLowerLimit);
-# cfsLowIdx2 = find(cfs<0);
-# cfsLowIdx = intersect(cfsLowIdx1, cfsLowIdx2);
-# cfs(cfsHighIdx) = cfsUpperLimit;
-# cfs(cfsLowIdx) = cfsLowerLimit;
-# cfsMat = reshape(cfs, size(xMat));
-
+# Clip CFS values for plotting purposes
+cfsHighIdx1 = (cfs>cfsUpperLimit).nonzero()
+cfsHighIdx2 = (cfs>0).nonzero()
+cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
+cfsLowIdx1 = (cfs<cfsLowerLimit).nonzero()
+cfsLowIdx2 = (cfs<0).nonzero()
+cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
+cfs[cfsHighIdx] = cfsUpperLimit
+cfs[cfsLowIdx] = cfsLowerLimit
+cfsMat = np.reshape(cfs, xMat.shape)
 
 # Visualize the results
 # figure;
 # hold on;
+fig = plt.figure()
+ax = fig.gca(projection='3d')
 
 # Pick a fill color proportional to slip magnitude
 slipMin = min(S, key=lambda x: x['slip'])['slip']
 slipMax = max(S, key=lambda x: x['slip'])['slip']
 slipDiff = slipMax - slipMin
 nColors = 256;
-# cmap = flipud(gray(nColors));
 
-# % Loop over all of the fault patches and plot
-# for iPatch = 1:numel(S)
-#     slipColorIdx = round((S(iPatch).slip - slipMin)/slipDiff * nColors);
-#     if slipColorIdx < 1
-#         slipColorIdx = 1;
-#     end
-#     if slipColorIdx > nColors
-#         slipColorIdx = nColors
-#     end
-    
-#     % Plot the individual fault patches
-#     fh = fill3([S(iPatch).x1 S(iPatch).x2 S(iPatch).x4 S(iPatch).x3], [S(iPatch).y1 S(iPatch).y2 S(iPatch).y4 S(iPatch).y3], -[S(iPatch).z1 S(iPatch).z2 S(iPatch).z4 S(iPatch).z3], 'y');
-#     set(fh, 'FaceColor', cmap(slipColorIdx, :));
-# end
+# Loop over all of the fault patches and plot
+for iPatch in range(0, len(S)):
+    # Plot the edges of each fault patch fault patches
+    ax.plot([S[iPatch]['x1'], S[iPatch]['x2']], 
+            [S[iPatch]['y1'], S[iPatch]['y2']],
+            [S[iPatch]['z1'], S[iPatch]['z2']], color='black')
+    ax.plot([S[iPatch]['x2'], S[iPatch]['x4']], 
+            [S[iPatch]['y2'], S[iPatch]['y4']],
+            [S[iPatch]['z2'], S[iPatch]['z4']], color='black')
+    ax.plot([S[iPatch]['x1'], S[iPatch]['x3']], 
+            [S[iPatch]['y1'], S[iPatch]['y3']],
+            [S[iPatch]['z1'], S[iPatch]['z3']], color='black')
+    ax.plot([S[iPatch]['x3'], S[iPatch]['x4']], 
+            [S[iPatch]['y3'], S[iPatch]['y4']],
+            [S[iPatch]['z3'], S[iPatch]['z4']], color='black')
+
 
 # % Add labels and set axes properties
+# ax('equal') # Doesn't seem to work
+# ax.pbaspect = [1.0, 1.0, 1.0] # Doesn't seem to work
 # axis equal;
 # box on;
 # xlabel('x (m)');
@@ -248,6 +256,7 @@ nColors = 256;
 # cameratoolbar;
 
 # % plot a horizontal slice showing the magnitude of the horizontal displacement field
+#surf = ax.plot_surface(xMat, yMat, Z, rstride=1, cstride=1, facecolors=colors, linewidth=0, antialiased=False)
 # sh = surf(xMat, yMat, obsDepth*ones(size(uxMat)), cfsMat);
 # set(sh, 'EdgeColor', 'none');
 # set(sh, 'FaceAlpha', 0.65)
@@ -259,3 +268,4 @@ nColors = 256;
 # set(ch, 'Position', [0.05 0.10 0.2 0.01]);
 # colormap(bluewhitered);
 
+plt.show()
