@@ -137,6 +137,7 @@ for iPatch = 1:numel(S)
     % Plot the individual fault patches
     fh = fill3([S(iPatch).x1 S(iPatch).x2 S(iPatch).x4 S(iPatch).x3], [S(iPatch).y1 S(iPatch).y2 S(iPatch).y4 S(iPatch).y3], -[S(iPatch).z1 S(iPatch).z2 S(iPatch).z4 S(iPatch).z3], 'y');
     set(fh, 'FaceColor', cmap(slipColorIdx, :));
+    % set(fh, 'FaceColor', 'none');
 end
 
 % Add labels and set axes properties
@@ -262,3 +263,4 @@ axis tight;
 ch = colorbar('horizontal');
 set(ch, 'Position', [0.05 0.10 0.2 0.01]);
 colormap(bluewhitered);
+view(2)
