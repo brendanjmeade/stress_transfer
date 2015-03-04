@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 # load file and extract geometric coordiantes and slip distribution
-eventName = 's1999HECTOR01SALI'
-N = 10 # Number of grid points in x and y-directions for visualization
+fileName = 's1999HECTOR01SALI'
+N = 100 # Number of grid points in x and y-directions for visualization
 lambdaLame = 0.25 # First Lame parameter
 muLame = 0.25 # shear modulus
 coefficientOfFriction = 0.4 # Coefficient of friction
@@ -20,8 +20,8 @@ cfsLowerLimit = -5e-6; # for visualization purposes
 obsDepth = -5e3; # depth of observation coordinates
 
 # Load the .mat (HDF5-ish) version of the model geometry and slip distribution
-F = scipy.io.loadmat(eventName + '.mat')
-F = F[eventName]
+F = scipy.io.loadmat(fileName + '.mat')
+F = F[fileName]
 F = F[0]
 S = list() # Empty list
 
@@ -232,7 +232,7 @@ for iPatch in range(0, len(S)): # Plot the edges of each fault patch fault patch
     ax2.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
 
 
-plt.title(eventName)
+plt.title(fileName)
 plt.xlabel('x (m)')
 plt.ylabel('y (m)')
 
