@@ -2,14 +2,14 @@ import math
 import numpy as np
 import scipy
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
-
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 # load file and extract geometric coordiantes and slip distribution
 eventName = 's1999HECTOR01SALI'
-N = 10 # Number of grid points in x and y-directions for visualization
+N = 100 # Number of grid points in x and y-directions for visualization
 lambdaLame = 0.25 # First Lame parameter
 muLame = 0.25 # shear modulus
 coefficientOfFriction = 0.4 # Coefficient of friction
@@ -27,7 +27,7 @@ S = list() # Empty list
 
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
 nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
-for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention
+for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention in .mat file
     # Extract geometric parameters from this panel common to all patches
     strike = 0
     strike = F['seg' + str(iPanel) + 'AStke'][0][0][0]
@@ -38,8 +38,8 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
     # calculate the length and wide if individual patch elements in current panel
     L = F['seg' + str(iPanel) + 'DimWL'][0][0][1] / np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[1]
     W = F['seg' + str(iPanel) + 'DimWL'][0][0][1] / np.shape(F['seg' + str(iPanel) + 'geoX'][0][:][:])[0]
-    rTemp = np.array([[math.cos(math.degrees(angle)), -math.sin(math.degrees(angle))], [math.sin(math.degrees(angle)), math.cos(math.degrees(angle))]])
-    xTempOrig = np.array([[L/2], [0]])
+    rTemp = np.array([[math.cos(math.radians(angle)), -math.sin(math.radians(angle))], [math.sin(math.radians(angle)), math.cos(math.radians(angle))]])
+    xTempOrig = np.array([[L/2.0], [0.0]])
     xTempRot = np.dot(rTemp, xTempOrig)
     xTopOffset = xTempRot[0];
     yTopOffset = xTempRot[1];
@@ -105,7 +105,7 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
             
             # Convert slip from centimeters to meters
             element['slip'] = element['slip'] * cm2m
-            rTemp = np.array([[math.cos(math.degrees(element['rake'])), -math.sin(math.degrees(element['rake']))], [math.sin(math.degrees(element['rake'])), math.cos(math.degrees(element['rake']))]])
+            rTemp = np.array([[math.cos(math.radians(element['rake'])), -math.sin(math.radians(element['rake']))], [math.sin(math.radians(element['rake'])), math.cos(math.radians(element['rake']))]])
             xTempOrig = np.array([[element['slip']], [0]])
             xTempRot = np.dot(rTemp, xTempOrig)
             element['slipStrike'] = xTempRot[0]
@@ -115,7 +115,7 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
 # Calculate elastic displacement field associated with one fault patch
 xVec = np.linspace(-50*km2m, 50*km2m, N)
 yVec = np.linspace(-50*km2m, 50*km2m, N)
-[xMat, yMat] = np.meshgrid(xVec, yVec)
+xMat, yMat = np.meshgrid(xVec, yVec)
 xVec = xMat.reshape(xMat.size, 1)
 yVec = yMat.reshape(yMat.size, 1)
 zVec = obsDepth*np.ones(xVec.size)
@@ -132,13 +132,13 @@ cfs = np.zeros(xVec.size)
 alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
 
 for iPatch in range(0, len(S)):
-    print iPatch
+    print 'patch ' + str(iPatch) + ' of ' + str(len(S))
     # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
     for iObs in range(0, len(xVec)):
         # Translate and (un)rotate observation coordinates
         xTemp = xVec[iObs]-S[iPatch]['x1']
         yTemp = yVec[iObs]-S[iPatch]['y1']
-        rTemp = np.array([[math.cos(math.degrees(-S[iPatch]['angle'])), -math.sin(math.degrees(-S[iPatch]['angle']))], [math.sin(math.degrees(-S[iPatch]['angle'])), math.cos(math.degrees(S[iPatch]['angle']))]])
+        rTemp = np.array([[math.cos(math.radians(-S[iPatch]['angle'])), -math.sin(math.radians(-S[iPatch]['angle']))], [math.sin(math.radians(-S[iPatch]['angle'])), math.cos(math.radians(S[iPatch]['angle']))]])
         xTempOrig = np.array([xTemp, yTemp]) # no need for brackets around x/yTemp because they are already arrays
         xTempRot = np.dot(rTemp, xTempOrig)
         xTemp = xTempRot[0];
@@ -215,57 +215,28 @@ cfs[cfsHighIdx] = cfsUpperLimit
 cfs[cfsLowIdx] = cfsLowerLimit
 cfsMat = np.reshape(cfs, xMat.shape)
 
-# Visualize the results
-# figure;
-# hold on;
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-
 # Pick a fill color proportional to slip magnitude
-slipMin = min(S, key=lambda x: x['slip'])['slip']
-slipMax = max(S, key=lambda x: x['slip'])['slip']
-slipDiff = slipMax - slipMin
-nColors = 256;
+# slipMin = min(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
+# slipMax = max(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
+# slipDiff = slipMax - slipMin
+# nColors = 256;
 
-# Loop over all of the fault patches and plot
-for iPatch in range(0, len(S)):
-    # Plot the edges of each fault patch fault patches
-    ax.plot([S[iPatch]['x1'], S[iPatch]['x2']], 
-            [S[iPatch]['y1'], S[iPatch]['y2']],
-            [S[iPatch]['z1'], S[iPatch]['z2']], color='black')
-    ax.plot([S[iPatch]['x2'], S[iPatch]['x4']], 
-            [S[iPatch]['y2'], S[iPatch]['y4']],
-            [S[iPatch]['z2'], S[iPatch]['z4']], color='black')
-    ax.plot([S[iPatch]['x1'], S[iPatch]['x3']], 
-            [S[iPatch]['y1'], S[iPatch]['y3']],
-            [S[iPatch]['z1'], S[iPatch]['z3']], color='black')
-    ax.plot([S[iPatch]['x3'], S[iPatch]['x4']], 
-            [S[iPatch]['y3'], S[iPatch]['y4']],
-            [S[iPatch]['z3'], S[iPatch]['z4']], color='black')
+fig = plt.figure()
+ax2 = fig.gca()
+origin = 'lower'
+CS = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin=origin, hold='on')
+for iPatch in range(0, len(S)): # Plot the edges of each fault patch fault patches
+    ax2.plot([S[iPatch]['x1'], S[iPatch]['x2']], [S[iPatch]['y1'], S[iPatch]['y2']], color='black')
+    ax2.plot([S[iPatch]['x2'], S[iPatch]['x4']], [S[iPatch]['y2'], S[iPatch]['y4']], color='black')
+    ax2.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
+    ax2.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
 
 
-# % Add labels and set axes properties
-# ax('equal') # Doesn't seem to work
-# ax.pbaspect = [1.0, 1.0, 1.0] # Doesn't seem to work
-# axis equal;
-# box on;
-# xlabel('x (m)');
-# ylabel('y (m)');
-# zlabel('z (m)');
-# view(3);
-# cameratoolbar;
+plt.title(eventName)
+plt.xlabel('x (m)')
+plt.ylabel('y (m)')
 
-# % plot a horizontal slice showing the magnitude of the horizontal displacement field
-#surf = ax.plot_surface(xMat, yMat, Z, rstride=1, cstride=1, facecolors=colors, linewidth=0, antialiased=False)
-# sh = surf(xMat, yMat, obsDepth*ones(size(uxMat)), cfsMat);
-# set(sh, 'EdgeColor', 'none');
-# set(sh, 'FaceAlpha', 0.65)
-# colormap(flipud(hot(20)));
-# axis tight;
-
-# % Add a small colorbar
-# ch = colorbar('horizontal');
-# set(ch, 'Position', [0.05 0.10 0.2 0.01]);
-# colormap(bluewhitered);
-
+# Make a colorbar for the ContourSet returned by the contourf call
+cbar = plt.colorbar(CS)
+cbar.ax.set_ylabel('CFS (Pa)')
 plt.show()
