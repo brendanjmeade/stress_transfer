@@ -9,7 +9,7 @@ from matplotlib import cm
 
 # load file and extract geometric coordiantes and slip distribution
 eventName = 's1999HECTOR01SALI'
-N = 100 # Number of grid points in x and y-directions for visualization
+N = 10 # Number of grid points in x and y-directions for visualization
 lambdaLame = 0.25 # First Lame parameter
 muLame = 0.25 # shear modulus
 coefficientOfFriction = 0.4 # Coefficient of friction
@@ -27,7 +27,7 @@ S = list() # Empty list
 
 # Extract the fault geometry and slip into a single stucture of ungrouped patches
 nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
-for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention in .mat file
+for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention of the fields in the dictionary from the .mat file
     # Extract geometric parameters from this panel common to all patches
     strike = 0
     strike = F['seg' + str(iPanel) + 'AStke'][0][0][0]
@@ -60,57 +60,57 @@ for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming c
             zTopCenter = F['seg' + str(iPanel) + 'geoZ'][0][iDownDip][iAlongStrike]
             
             # Calculate location of top corners
-            element = dict()
-            element['x1'] = xTopCenter + xTopOffset
-            element['y1'] = yTopCenter + yTopOffset
-            element['z1'] = zTopCenter - zTopOffset
-            element['x2'] = xTopCenter - xTopOffset
-            element['y2'] = yTopCenter - yTopOffset
-            element['z2'] = zTopCenter - zTopOffset
+            panel = dict()
+            panel['x1'] = xTopCenter + xTopOffset
+            panel['y1'] = yTopCenter + yTopOffset
+            panel['z1'] = zTopCenter - zTopOffset
+            panel['x2'] = xTopCenter - xTopOffset
+            panel['y2'] = yTopCenter - yTopOffset
+            panel['z2'] = zTopCenter - zTopOffset
 
             # Calculate location of bottom corners
-            element['x3'] = xTopCenter + xTopBottomOffset + xTopOffset
-            element['y3'] = yTopCenter + yTopBottomOffset + yTopOffset
-            element['z3'] = zTopCenter + zTopBottomOffset - zTopOffset
-            element['x4'] = xTopCenter + xTopBottomOffset - xTopOffset
-            element['y4'] = yTopCenter + yTopBottomOffset - yTopOffset
-            element['z4'] = zTopCenter + zTopBottomOffset - zTopOffset
+            panel['x3'] = xTopCenter + xTopBottomOffset + xTopOffset
+            panel['y3'] = yTopCenter + yTopBottomOffset + yTopOffset
+            panel['z3'] = zTopCenter + zTopBottomOffset - zTopOffset
+            panel['x4'] = xTopCenter + xTopBottomOffset - xTopOffset
+            panel['y4'] = yTopCenter + yTopBottomOffset - yTopOffset
+            panel['z4'] = zTopCenter + zTopBottomOffset - zTopOffset
             
             # Extract fault slip
-            element['slip'] = F['seg' + str(iPanel) + 'SLIP'][0][iDownDip][iAlongStrike]
+            panel['slip'] = F['seg' + str(iPanel) + 'SLIP'][0][iDownDip][iAlongStrike]
 
             # Extract patch dip, strike, width, and length
-            element['dip'] = F['seg' + str(iPanel) + 'DipAn']
-            element['strike'] = F['seg' + str(iPanel) + 'AStke']
-            element['rake'] = F['seg' + str(iPanel) + 'RAKE'][0][iDownDip][iAlongStrike]
-            element['angle'] = angle
-            element['width'] = W
-            element['length'] = L
+            panel['dip'] = F['seg' + str(iPanel) + 'DipAn']
+            panel['strike'] = F['seg' + str(iPanel) + 'AStke']
+            panel['rake'] = F['seg' + str(iPanel) + 'RAKE'][0][iDownDip][iAlongStrike]
+            panel['angle'] = angle
+            panel['width'] = W
+            panel['length'] = L
             
             # Convert all distance measurements from kilometers to meters
-            element['x1'] = element['x1'] * km2m
-            element['x2'] = element['x2'] * km2m
-            element['x3'] = element['x3'] * km2m
-            element['x4'] = element['x4'] * km2m
-            element['y1'] = element['y1'] * km2m
-            element['y2'] = element['y2'] * km2m
-            element['y3'] = element['y3'] * km2m
-            element['y4'] = element['y4'] * km2m
-            element['z1'] = element['z1'] * km2m
-            element['z2'] = element['z2'] * km2m
-            element['z3'] = element['z3'] * km2m
-            element['z4'] = element['z4'] * km2m
-            element['width'] = element['width'] * km2m
-            element['length'] = element['length'] * km2m
+            panel['x1'] = panel['x1'] * km2m
+            panel['x2'] = panel['x2'] * km2m
+            panel['x3'] = panel['x3'] * km2m
+            panel['x4'] = panel['x4'] * km2m
+            panel['y1'] = panel['y1'] * km2m
+            panel['y2'] = panel['y2'] * km2m
+            panel['y3'] = panel['y3'] * km2m
+            panel['y4'] = panel['y4'] * km2m
+            panel['z1'] = panel['z1'] * km2m
+            panel['z2'] = panel['z2'] * km2m
+            panel['z3'] = panel['z3'] * km2m
+            panel['z4'] = panel['z4'] * km2m
+            panel['width'] = panel['width'] * km2m
+            panel['length'] = panel['length'] * km2m
             
             # Convert slip from centimeters to meters
-            element['slip'] = element['slip'] * cm2m
-            rTemp = np.array([[math.cos(math.radians(element['rake'])), -math.sin(math.radians(element['rake']))], [math.sin(math.radians(element['rake'])), math.cos(math.radians(element['rake']))]])
-            xTempOrig = np.array([[element['slip']], [0]])
+            panel['slip'] = panel['slip'] * cm2m
+            rTemp = np.array([[math.cos(math.radians(panel['rake'])), -math.sin(math.radians(panel['rake']))], [math.sin(math.radians(panel['rake'])), math.cos(math.radians(panel['rake']))]])
+            xTempOrig = np.array([[panel['slip']], [0]])
             xTempRot = np.dot(rTemp, xTempOrig)
-            element['slipStrike'] = xTempRot[0]
-            element['slipDip'] = xTempRot[1]
-            S.append(element)
+            panel['slipStrike'] = xTempRot[0]
+            panel['slipDip'] = xTempRot[1]
+            S.append(panel)
 
 # Calculate elastic displacement field associated with one fault patch
 xVec = np.linspace(-50*km2m, 50*km2m, N)
@@ -132,7 +132,7 @@ cfs = np.zeros(xVec.size)
 alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
 
 for iPatch in range(0, len(S)):
-    print 'patch ' + str(iPatch) + ' of ' + str(len(S))
+    print 'patch ' + str(iPatch+1) + ' of ' + str(len(S))
     # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
     for iObs in range(0, len(xVec)):
         # Translate and (un)rotate observation coordinates
