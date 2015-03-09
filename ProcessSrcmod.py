@@ -107,8 +107,32 @@ def readSrcmodFile(fileName):
                 S.append(panel)
     return(S)
 
+def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
+    cfs = np.zeros(np.shape(StressTensor['sxx']))
+    for iObs in range(0, len(StressTensor['sxx'])):
+        deltaTau = (StressTensor['sxx'][iObs] * nVecNormal[0] * nVecInPlane[0] + 
+                    StressTensor['sxy'][iObs] * nVecNormal[1] * nVecInPlane[0] + 
+                    StressTensor['sxz'][iObs] * nVecNormal[2] * nVecInPlane[0] + 
+                    StressTensor['sxy'][iObs] * nVecNormal[0] * nVecInPlane[1] + 
+                    StressTensor['syy'][iObs] * nVecNormal[1] * nVecInPlane[1] + 
+                    StressTensor['syz'][iObs] * nVecNormal[2] * nVecInPlane[1] + 
+                    StressTensor['sxz'][iObs] * nVecNormal[0] * nVecInPlane[2] + 
+                    StressTensor['syz'][iObs] * nVecNormal[1] * nVecInPlane[2] + 
+                    StressTensor['szz'][iObs] * nVecNormal[2] * nVecInPlane[2])
+        deltaSigma = (StressTensor['sxx'][iObs] * nVecNormal[0] * nVecNormal[0] + 
+                      StressTensor['sxy'][iObs] * nVecNormal[1] * nVecNormal[0] + 
+                      StressTensor['sxz'][iObs] * nVecNormal[2] * nVecNormal[0] + 
+                      StressTensor['sxy'][iObs] * nVecNormal[0] * nVecNormal[1] + 
+                      StressTensor['syy'][iObs] * nVecNormal[1] * nVecNormal[1] + 
+                      StressTensor['syz'][iObs] * nVecNormal[2] * nVecNormal[1] + 
+                      StressTensor['sxz'][iObs] * nVecNormal[0] * nVecNormal[2] + 
+                      StressTensor['syz'][iObs] * nVecNormal[1] * nVecNormal[2] + 
+                      StressTensor['szz'][iObs] * nVecNormal[2] * nVecNormal[2])
+        cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
+    return(cfs)
+
 def main():
-    # load file and extract geometric coordiantes and slip distribution
+    # Load file and extract geometric coordiantes and slip distribution
     fileName = 's1999HECTOR01SALI'
     N = 10 # Number of grid points in x and y-directions for visualization
     lambdaLame = 0.25 # First Lame parameter
@@ -119,27 +143,32 @@ def main():
     cfsUpperLimit = 5e-6; # for visualziation purposes
     cfsLowerLimit = -5e-6; # for visualization purposes
     obsDepth = -5e3; # depth of observation coordinates
+    nVecInPlane = [0, 1, 0]
+    nVecNormal = [1, 0, 0]
 
-    S = readSrcmodFile(fileName)
-    # NNN= calculateOkada(S, xVec, yVec, zVec, lambdaLame, muLambda)
-
-    # Calculate elastic displacement field associated with one fault patch
+    # Observation coordinates
     xVec = np.linspace(-50*km2m, 50*km2m, N)
     yVec = np.linspace(-50*km2m, 50*km2m, N)
     xMat, yMat = np.meshgrid(xVec, yVec)
     xVec = xMat.reshape(xMat.size, 1)
     yVec = yMat.reshape(yMat.size, 1)
     zVec = obsDepth*np.ones(xVec.size)
-    ux = np.zeros(xVec.size)
-    uy = np.zeros(xVec.size)
-    uz = np.zeros(xVec.size)
-    sxx = np.zeros(xVec.size)
-    sxy = np.zeros(xVec.size)
-    sxz = np.zeros(xVec.size)
-    syy = np.zeros(xVec.size)
-    syz = np.zeros(xVec.size)
-    szz = np.zeros(xVec.size)
-    cfs = np.zeros(xVec.size)
+
+    S = readSrcmodFile(fileName)
+    # NNN= calculateOkada(S, xVec, yVec, zVec, lambdaLame, muLambda)
+
+    # Calculate elastic displacement field associated with one fault patch
+    DisplacementVector = dict()
+    DisplacementVector['ux'] = np.zeros(xVec.size)
+    DisplacementVector['uy'] = np.zeros(xVec.size)
+    DisplacementVector['uz'] = np.zeros(xVec.size)
+    StressTensor = dict()
+    StressTensor['sxx'] = np.zeros(xVec.size)
+    StressTensor['sxy'] = np.zeros(xVec.size)
+    StressTensor['sxz'] = np.zeros(xVec.size)
+    StressTensor['syy'] = np.zeros(xVec.size)
+    StressTensor['syz'] = np.zeros(xVec.size)
+    StressTensor['szz'] = np.zeros(xVec.size)
 
     for iPatch in range(0, len(S)):
         print 'patch ' + str(iPatch+1) + ' of ' + str(len(S))
@@ -154,7 +183,7 @@ def main():
             xTemp = xTempRot[0]
             yTemp = xTempRot[1]
 
-            # Calculate elastic deformation using Okada's method
+            # Calculate elastic deformation using Okada 1992 (BSSA)
             # Seven arguments to DC3DWrapper are required:
             # alpha = (lambda + mu) / (lambda + 2 * mu)
             # xo = 3-vector representing the observation point (x, y, z in the original)
@@ -168,55 +197,30 @@ def main():
                                             [0.0, S[iPatch]['length']],
                                             [0.0, S[iPatch]['width']],
                                             [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
-            ux[iObs] = ux[iObs] + u[0]
-            uy[iObs] = uy[iObs] + u[1]
-            uz[iObs] = uz[iObs] + u[2]
-            sxx[iObs] = sxx[iObs] + uGrad[0, 0]
-            sxy[iObs] = sxy[iObs] + 0.5*(uGrad[0, 1] + uGrad[1, 0])
-            sxz[iObs] = sxz[iObs] + 0.5*(uGrad[0, 2] + uGrad[2, 0])
-            syy[iObs] = syy[iObs] + uGrad[1, 1]
-            syz[iObs] = syz[iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
-            szz[iObs] = szz[iObs] + uGrad[2, 2]
+            DisplacementVector['ux'][iObs] = DisplacementVector['ux'][iObs] + u[0]
+            DisplacementVector['uy'][iObs] = DisplacementVector['uy'][iObs] + u[1]
+            DisplacementVector['uz'][iObs] = DisplacementVector['uz'][iObs] + u[2]
+            StressTensor['sxx'][iObs] = StressTensor['sxx'][iObs] + uGrad[0, 0]
+            StressTensor['sxy'][iObs] = StressTensor['sxy'][iObs] + 0.5*(uGrad[0, 1] + uGrad[1, 0])
+            StressTensor['sxz'][iObs] = StressTensor['sxz'][iObs] + 0.5*(uGrad[0, 2] + uGrad[2, 0])
+            StressTensor['syy'][iObs] = StressTensor['syy'][iObs] + uGrad[1, 1]
+            StressTensor['syz'][iObs] = StressTensor['syz'][iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
+            StressTensor['szz'][iObs] = StressTensor['szz'][iObs] + uGrad[2, 2]
 
-            # Resolve Coulomb failure stresses on reciever plane
-            nVecInPlane = [0, 1, 0]
-            nVecNormal = [1, 0, 0]
-
-            deltaTau = (sxx[iObs] * nVecNormal[0] * nVecInPlane[0] + 
-                        sxy[iObs] * nVecNormal[1] * nVecInPlane[0] + 
-                        sxz[iObs] * nVecNormal[2] * nVecInPlane[0] + 
-                        sxy[iObs] * nVecNormal[0] * nVecInPlane[1] + 
-                        syy[iObs] * nVecNormal[1] * nVecInPlane[1] + 
-                        syz[iObs] * nVecNormal[2] * nVecInPlane[1] + 
-                        sxz[iObs] * nVecNormal[0] * nVecInPlane[2] + 
-                        syz[iObs] * nVecNormal[1] * nVecInPlane[2] + 
-                        szz[iObs] * nVecNormal[2] * nVecInPlane[2])
-            deltaSigma = (sxx[iObs] * nVecNormal[0] * nVecNormal[0] + 
-                          sxy[iObs] * nVecNormal[1] * nVecNormal[0] + 
-                          sxz[iObs] * nVecNormal[2] * nVecNormal[0] + 
-                          sxy[iObs] * nVecNormal[0] * nVecNormal[1] + 
-                          syy[iObs] * nVecNormal[1] * nVecNormal[1] + 
-                          syz[iObs] * nVecNormal[2] * nVecNormal[1] + 
-                          sxz[iObs] * nVecNormal[0] * nVecNormal[2] + 
-                          syz[iObs] * nVecNormal[1] * nVecNormal[2] + 
-                          szz[iObs] * nVecNormal[2] * nVecNormal[2])
-            cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
-
-
-    # Package into a dictionary of lists...will have to change later
+    # Resolve Coulomb failure stresses on reciever plane
+    cfs = calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction)
 
     # Reshape vectors as plain matrices for plotting
-    uxMat = np.reshape(ux, xMat.shape)
-    uyMat = np.reshape(uy, xMat.shape)
-    uzMat = np.reshape(uz, xMat.shape)
+    uxMat = np.reshape(DisplacementVector['ux'], xMat.shape)
+    uyMat = np.reshape(DisplacementVector['uy'], xMat.shape)
+    uzMat = np.reshape(DisplacementVector['uz'], xMat.shape)
     uHorizontalMagMat = np.sqrt(uxMat**2.0 + uyMat**2.0);
-    sxxMat = np.reshape(sxx, xMat.shape);
-    sxyMat = np.reshape(sxy, xMat.shape);
-    sxzMat = np.reshape(sxz, xMat.shape);
-    syyMat = np.reshape(syy, xMat.shape);
-    syzMat = np.reshape(syz, xMat.shape);
-    szzMat = np.reshape(szz, xMat.shape);
-
+    sxxMat = np.reshape(StressTensor['sxx'], xMat.shape);
+    sxyMat = np.reshape(StressTensor['sxy'], xMat.shape);
+    sxzMat = np.reshape(StressTensor['sxz'], xMat.shape);
+    syyMat = np.reshape(StressTensor['syy'], xMat.shape);
+    syzMat = np.reshape(StressTensor['syz'], xMat.shape);
+    szzMat = np.reshape(StressTensor['szz'], xMat.shape);
 
     # Clip CFS values for plotting purposes
     cfsHighIdx1 = (cfs>cfsUpperLimit).nonzero()
@@ -245,7 +249,6 @@ def main():
         ax2.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
         ax2.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
 
-
     plt.title(fileName)
     plt.xlabel('x (m)')
     plt.ylabel('y (m)')
@@ -255,7 +258,8 @@ def main():
     cbar.ax.set_ylabel('CFS (Pa)')
     plt.show()
 
-    code.interact(local=locals()) # Provide keyboard control to interact with variables
+    # Provide keyboard control to interact with variables
+    code.interact(local=locals())
 
 if __name__ == "__main__":
    main()
