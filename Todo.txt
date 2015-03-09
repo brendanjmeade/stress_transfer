@@ -1,7 +1,5 @@
 Todo:
 
-- Convert ProcessSrcmod.m (Matlab) to ProcessSrcmod.py (Python)
-
 - Python script to look at all SRCMOD files in current director and plot locations on the globe
   - Download at least two geographically different SRCMOD files
   - Find Mai's documentation on reference frames

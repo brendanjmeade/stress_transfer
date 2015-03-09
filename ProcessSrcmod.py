@@ -1,6 +1,6 @@
 import math
 import numpy as np
-#import scipy
+import code
 from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
 from mpl_toolkits.mplot3d import Axes3D
@@ -8,20 +8,12 @@ from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
-# load file and extract geometric coordiantes and slip distribution
-fileName = 's1999HECTOR01SALI'
-N = 10 # Number of grid points in x and y-directions for visualization
-lambdaLame = 0.25 # First Lame parameter
-muLame = 0.25 # shear modulus
-coefficientOfFriction = 0.4 # Coefficient of friction
-km2m = 1e3 # Convert kilometers to meters
-cm2m = 1e-2 # Convert centimeters to meters
-cfsUpperLimit = 5e-6; # for visualziation purposes
-cfsLowerLimit = -5e-6; # for visualization purposes
-obsDepth = -5e3; # depth of observation coordinates
 
 def readSrcmodFile(fileName):
     # Load the .mat (HDF5-ish) version of the model geometry and slip distribution
+    km2m = 1e3 # Convert kilometers to meters
+    cm2m = 1e-2 # Convert centimeters to meters
+
     F = sio.loadmat(fileName + '.mat')
     F = F[fileName]
     F = F[0]
@@ -115,137 +107,155 @@ def readSrcmodFile(fileName):
                 S.append(panel)
     return(S)
 
-# start of what will eventually be main
-S = readSrcmodFile(fileName)
-# NNN= calculateOkada(S, xVec, yVec, zVec, lambdaLame, muLambda)
+def main():
+    # load file and extract geometric coordiantes and slip distribution
+    fileName = 's1999HECTOR01SALI'
+    N = 10 # Number of grid points in x and y-directions for visualization
+    lambdaLame = 0.25 # First Lame parameter
+    muLame = 0.25 # shear modulus
+    alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
+    coefficientOfFriction = 0.4 # Coefficient of friction
+    km2m = 1e3 # Convert kilometers to meters
+    cfsUpperLimit = 5e-6; # for visualziation purposes
+    cfsLowerLimit = -5e-6; # for visualization purposes
+    obsDepth = -5e3; # depth of observation coordinates
+
+    S = readSrcmodFile(fileName)
+    # NNN= calculateOkada(S, xVec, yVec, zVec, lambdaLame, muLambda)
+
+    # Calculate elastic displacement field associated with one fault patch
+    xVec = np.linspace(-50*km2m, 50*km2m, N)
+    yVec = np.linspace(-50*km2m, 50*km2m, N)
+    xMat, yMat = np.meshgrid(xVec, yVec)
+    xVec = xMat.reshape(xMat.size, 1)
+    yVec = yMat.reshape(yMat.size, 1)
+    zVec = obsDepth*np.ones(xVec.size)
+    ux = np.zeros(xVec.size)
+    uy = np.zeros(xVec.size)
+    uz = np.zeros(xVec.size)
+    sxx = np.zeros(xVec.size)
+    sxy = np.zeros(xVec.size)
+    sxz = np.zeros(xVec.size)
+    syy = np.zeros(xVec.size)
+    syz = np.zeros(xVec.size)
+    szz = np.zeros(xVec.size)
+    cfs = np.zeros(xVec.size)
+
+    for iPatch in range(0, len(S)):
+        print 'patch ' + str(iPatch+1) + ' of ' + str(len(S))
+        # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
+        for iObs in range(0, len(xVec)):
+            # Translate and (un)rotate observation coordinates
+            xTemp = xVec[iObs]-S[iPatch]['x1']
+            yTemp = yVec[iObs]-S[iPatch]['y1']
+            rTemp = np.array([[math.cos(math.radians(-S[iPatch]['angle'])), -math.sin(math.radians(-S[iPatch]['angle']))], [math.sin(math.radians(-S[iPatch]['angle'])), math.cos(math.radians(S[iPatch]['angle']))]])
+            xTempOrig = np.array([xTemp, yTemp]) # no need for brackets around x/yTemp because they are already arrays
+            xTempRot = np.dot(rTemp, xTempOrig)
+            xTemp = xTempRot[0]
+            yTemp = xTempRot[1]
+
+            # Calculate elastic deformation using Okada's method
+            # Seven arguments to DC3DWrapper are required:
+            # alpha = (lambda + mu) / (lambda + 2 * mu)
+            # xo = 3-vector representing the observation point (x, y, z in the original)
+            # depth = the depth of the fault origin
+            # dip = the dip-angle of the rectangular dislocation surface
+            # strike_width = the along-strike range of the surface (al1,al2 in the original)
+            # dip_width = the along-dip range of the surface (aw1, aw2 in the original)
+            # dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
+            success, u, uGrad = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
+                                            S[iPatch]['z3'], S[iPatch]['dip'],
+                                            [0.0, S[iPatch]['length']],
+                                            [0.0, S[iPatch]['width']],
+                                            [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
+            ux[iObs] = ux[iObs] + u[0]
+            uy[iObs] = uy[iObs] + u[1]
+            uz[iObs] = uz[iObs] + u[2]
+            sxx[iObs] = sxx[iObs] + uGrad[0, 0]
+            sxy[iObs] = sxy[iObs] + 0.5*(uGrad[0, 1] + uGrad[1, 0])
+            sxz[iObs] = sxz[iObs] + 0.5*(uGrad[0, 2] + uGrad[2, 0])
+            syy[iObs] = syy[iObs] + uGrad[1, 1]
+            syz[iObs] = syz[iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
+            szz[iObs] = szz[iObs] + uGrad[2, 2]
+
+            # Resolve Coulomb failure stresses on reciever plane
+            nVecInPlane = [0, 1, 0]
+            nVecNormal = [1, 0, 0]
+
+            deltaTau = (sxx[iObs] * nVecNormal[0] * nVecInPlane[0] + 
+                        sxy[iObs] * nVecNormal[1] * nVecInPlane[0] + 
+                        sxz[iObs] * nVecNormal[2] * nVecInPlane[0] + 
+                        sxy[iObs] * nVecNormal[0] * nVecInPlane[1] + 
+                        syy[iObs] * nVecNormal[1] * nVecInPlane[1] + 
+                        syz[iObs] * nVecNormal[2] * nVecInPlane[1] + 
+                        sxz[iObs] * nVecNormal[0] * nVecInPlane[2] + 
+                        syz[iObs] * nVecNormal[1] * nVecInPlane[2] + 
+                        szz[iObs] * nVecNormal[2] * nVecInPlane[2])
+            deltaSigma = (sxx[iObs] * nVecNormal[0] * nVecNormal[0] + 
+                          sxy[iObs] * nVecNormal[1] * nVecNormal[0] + 
+                          sxz[iObs] * nVecNormal[2] * nVecNormal[0] + 
+                          sxy[iObs] * nVecNormal[0] * nVecNormal[1] + 
+                          syy[iObs] * nVecNormal[1] * nVecNormal[1] + 
+                          syz[iObs] * nVecNormal[2] * nVecNormal[1] + 
+                          sxz[iObs] * nVecNormal[0] * nVecNormal[2] + 
+                          syz[iObs] * nVecNormal[1] * nVecNormal[2] + 
+                          szz[iObs] * nVecNormal[2] * nVecNormal[2])
+            cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
 
 
-# Calculate elastic displacement field associated with one fault patch
-xVec = np.linspace(-50*km2m, 50*km2m, N)
-yVec = np.linspace(-50*km2m, 50*km2m, N)
-xMat, yMat = np.meshgrid(xVec, yVec)
-xVec = xMat.reshape(xMat.size, 1)
-yVec = yMat.reshape(yMat.size, 1)
-zVec = obsDepth*np.ones(xVec.size)
-ux = np.zeros(xVec.size)
-uy = np.zeros(xVec.size)
-uz = np.zeros(xVec.size)
-sxx = np.zeros(xVec.size)
-sxy = np.zeros(xVec.size)
-sxz = np.zeros(xVec.size)
-syy = np.zeros(xVec.size)
-syz = np.zeros(xVec.size)
-szz = np.zeros(xVec.size)
-cfs = np.zeros(xVec.size)
-alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
+    # Package into a dictionary of lists...will have to change later
 
-for iPatch in range(0, len(S)):
-    print 'patch ' + str(iPatch+1) + ' of ' + str(len(S))
-    # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
-    for iObs in range(0, len(xVec)):
-        # Translate and (un)rotate observation coordinates
-        xTemp = xVec[iObs]-S[iPatch]['x1']
-        yTemp = yVec[iObs]-S[iPatch]['y1']
-        rTemp = np.array([[math.cos(math.radians(-S[iPatch]['angle'])), -math.sin(math.radians(-S[iPatch]['angle']))], [math.sin(math.radians(-S[iPatch]['angle'])), math.cos(math.radians(S[iPatch]['angle']))]])
-        xTempOrig = np.array([xTemp, yTemp]) # no need for brackets around x/yTemp because they are already arrays
-        xTempRot = np.dot(rTemp, xTempOrig)
-        xTemp = xTempRot[0]
-        yTemp = xTempRot[1]
-
-        # Calculate elastic deformation using Okada's method
-        # Seven arguments to DC3DWrapper are required:
-        # alpha = (lambda + mu) / (lambda + 2 * mu)
-        # xo = 3-vector representing the observation point (x, y, z in the original)
-        # depth = the depth of the fault origin
-        # dip = the dip-angle of the rectangular dislocation surface
-        # strike_width = the along-strike range of the surface (al1,al2 in the original)
-        # dip_width = the along-dip range of the surface (aw1, aw2 in the original)
-        # dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
-        success, u, uGrad = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
-                                        S[iPatch]['z3'], S[iPatch]['dip'],
-                                        [0.0, S[iPatch]['length']],
-                                        [0.0, S[iPatch]['width']],
-                                        [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
-        ux[iObs] = ux[iObs] + u[0]
-        uy[iObs] = uy[iObs] + u[1]
-        uz[iObs] = uz[iObs] + u[2]
-        sxx[iObs] = sxx[iObs] + uGrad[0, 0]
-        sxy[iObs] = sxy[iObs] + 0.5*(uGrad[0, 1] + uGrad[1, 0])
-        sxz[iObs] = sxz[iObs] + 0.5*(uGrad[0, 2] + uGrad[2, 0])
-        syy[iObs] = syy[iObs] + uGrad[1, 1]
-        syz[iObs] = syz[iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
-        szz[iObs] = szz[iObs] + uGrad[2, 2]
-        
-        # Resolve Coulomb failure stresses on reciever plane
-        nVecInPlane = [0, 1, 0]
-        nVecNormal = [1, 0, 0]
-       
-        deltaTau = (sxx[iObs] * nVecNormal[0] * nVecInPlane[0] + 
-                    sxy[iObs] * nVecNormal[1] * nVecInPlane[0] + 
-                    sxz[iObs] * nVecNormal[2] * nVecInPlane[0] + 
-                    sxy[iObs] * nVecNormal[0] * nVecInPlane[1] + 
-                    syy[iObs] * nVecNormal[1] * nVecInPlane[1] + 
-                    syz[iObs] * nVecNormal[2] * nVecInPlane[1] + 
-                    sxz[iObs] * nVecNormal[0] * nVecInPlane[2] + 
-                    syz[iObs] * nVecNormal[1] * nVecInPlane[2] + 
-                    szz[iObs] * nVecNormal[2] * nVecInPlane[2])
-        deltaSigma = (sxx[iObs] * nVecNormal[0] * nVecNormal[0] + 
-                      sxy[iObs] * nVecNormal[1] * nVecNormal[0] + 
-                      sxz[iObs] * nVecNormal[2] * nVecNormal[0] + 
-                      sxy[iObs] * nVecNormal[0] * nVecNormal[1] + 
-                      syy[iObs] * nVecNormal[1] * nVecNormal[1] + 
-                      syz[iObs] * nVecNormal[2] * nVecNormal[1] + 
-                      sxz[iObs] * nVecNormal[0] * nVecNormal[2] + 
-                      syz[iObs] * nVecNormal[1] * nVecNormal[2] + 
-                      szz[iObs] * nVecNormal[2] * nVecNormal[2])
-        cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
-
-# Reshape vectors as plain matrices for plotting
-uxMat = np.reshape(ux, xMat.shape)
-uyMat = np.reshape(uy, xMat.shape)
-uzMat = np.reshape(uz, xMat.shape)
-uHorizontalMagMat = np.sqrt(uxMat**2.0 + uyMat**2.0);
-sxxMat = np.reshape(sxx, xMat.shape);
-sxyMat = np.reshape(sxy, xMat.shape);
-sxzMat = np.reshape(sxz, xMat.shape);
-syyMat = np.reshape(syy, xMat.shape);
-syzMat = np.reshape(syz, xMat.shape);
-szzMat = np.reshape(szz, xMat.shape);
+    # Reshape vectors as plain matrices for plotting
+    uxMat = np.reshape(ux, xMat.shape)
+    uyMat = np.reshape(uy, xMat.shape)
+    uzMat = np.reshape(uz, xMat.shape)
+    uHorizontalMagMat = np.sqrt(uxMat**2.0 + uyMat**2.0);
+    sxxMat = np.reshape(sxx, xMat.shape);
+    sxyMat = np.reshape(sxy, xMat.shape);
+    sxzMat = np.reshape(sxz, xMat.shape);
+    syyMat = np.reshape(syy, xMat.shape);
+    syzMat = np.reshape(syz, xMat.shape);
+    szzMat = np.reshape(szz, xMat.shape);
 
 
-# Clip CFS values for plotting purposes
-cfsHighIdx1 = (cfs>cfsUpperLimit).nonzero()
-cfsHighIdx2 = (cfs>0).nonzero()
-cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
-cfsLowIdx1 = (cfs<cfsLowerLimit).nonzero()
-cfsLowIdx2 = (cfs<0).nonzero()
-cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
-cfs[cfsHighIdx] = cfsUpperLimit
-cfs[cfsLowIdx] = cfsLowerLimit
-cfsMat = np.reshape(cfs, xMat.shape)
+    # Clip CFS values for plotting purposes
+    cfsHighIdx1 = (cfs>cfsUpperLimit).nonzero()
+    cfsHighIdx2 = (cfs>0).nonzero()
+    cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
+    cfsLowIdx1 = (cfs<cfsLowerLimit).nonzero()
+    cfsLowIdx2 = (cfs<0).nonzero()
+    cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
+    cfs[cfsHighIdx] = cfsUpperLimit
+    cfs[cfsLowIdx] = cfsLowerLimit
+    cfsMat = np.reshape(cfs, xMat.shape)
 
-# Pick a fill color proportional to slip magnitude
-# slipMin = min(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
-# slipMax = max(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
-# slipDiff = slipMax - slipMin
-# nColors = 256;
+    # Pick a fill color proportional to slip magnitude
+    # slipMin = min(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
+    # slipMax = max(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
+    # slipDiff = slipMax - slipMin
+    # nColors = 256;
 
-fig = plt.figure()
-ax2 = fig.gca()
-origin = 'lower'
-CS = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin=origin, hold='on')
-for iPatch in range(0, len(S)): # Plot the edges of each fault patch fault patches
-    ax2.plot([S[iPatch]['x1'], S[iPatch]['x2']], [S[iPatch]['y1'], S[iPatch]['y2']], color='black')
-    ax2.plot([S[iPatch]['x2'], S[iPatch]['x4']], [S[iPatch]['y2'], S[iPatch]['y4']], color='black')
-    ax2.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
-    ax2.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
+    fig = plt.figure()
+    ax2 = fig.gca()
+    origin = 'lower'
+    CS = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin=origin, hold='on')
+    for iPatch in range(0, len(S)): # Plot the edges of each fault patch fault patches
+        ax2.plot([S[iPatch]['x1'], S[iPatch]['x2']], [S[iPatch]['y1'], S[iPatch]['y2']], color='black')
+        ax2.plot([S[iPatch]['x2'], S[iPatch]['x4']], [S[iPatch]['y2'], S[iPatch]['y4']], color='black')
+        ax2.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
+        ax2.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
 
 
-plt.title(fileName)
-plt.xlabel('x (m)')
-plt.ylabel('y (m)')
+    plt.title(fileName)
+    plt.xlabel('x (m)')
+    plt.ylabel('y (m)')
 
-# Make a colorbar for the ContourSet returned by the contourf call
-cbar = plt.colorbar(CS)
-cbar.ax.set_ylabel('CFS (Pa)')
-plt.show()
+    # Make a colorbar for the ContourSet returned by the contourf call
+    cbar = plt.colorbar(CS)
+    cbar.ax.set_ylabel('CFS (Pa)')
+    plt.show()
+
+    code.interact(local=locals()) # Provide keyboard control to interact with variables
+
+if __name__ == "__main__":
+   main()
