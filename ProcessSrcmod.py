@@ -8,12 +8,12 @@ from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
-
 def readSrcmodFile(fileName):
-    # Load the .mat (HDF5-ish) version of the model geometry and slip distribution
+    # Constants for changing dimensions
     km2m = 1e3 # Convert kilometers to meters
     cm2m = 1e-2 # Convert centimeters to meters
 
+    # Load the .mat (HDF5-ish) version of the model geometry and slip distribution
     F = sio.loadmat(fileName + '.mat')
     F = F[fileName]
     F = F[0]
@@ -131,32 +131,7 @@ def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
         cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
     return(cfs)
 
-def main():
-    # Load file and extract geometric coordiantes and slip distribution
-    fileName = 's1999HECTOR01SALI'
-    N = 10 # Number of grid points in x and y-directions for visualization
-    lambdaLame = 0.25 # First Lame parameter
-    muLame = 0.25 # shear modulus
-    alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
-    coefficientOfFriction = 0.4 # Coefficient of friction
-    km2m = 1e3 # Convert kilometers to meters
-    cfsUpperLimit = 5e-6; # for visualziation purposes
-    cfsLowerLimit = -5e-6; # for visualization purposes
-    obsDepth = -5e3; # depth of observation coordinates
-    nVecInPlane = [0, 1, 0]
-    nVecNormal = [1, 0, 0]
-
-    # Observation coordinates
-    xVec = np.linspace(-50*km2m, 50*km2m, N)
-    yVec = np.linspace(-50*km2m, 50*km2m, N)
-    xMat, yMat = np.meshgrid(xVec, yVec)
-    xVec = xMat.reshape(xMat.size, 1)
-    yVec = yMat.reshape(yMat.size, 1)
-    zVec = obsDepth*np.ones(xVec.size)
-
-    S = readSrcmodFile(fileName)
-    # NNN= calculateOkada(S, xVec, yVec, zVec, lambdaLame, muLambda)
-
+def calcOkadaDisplacementStress(xVec, yVec, zVec, S, alpha):
     # Calculate elastic displacement field associated with one fault patch
     DisplacementVector = dict()
     DisplacementVector['ux'] = np.zeros(xVec.size)
@@ -207,20 +182,41 @@ def main():
             StressTensor['syz'][iObs] = StressTensor['syz'][iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
             StressTensor['szz'][iObs] = StressTensor['szz'][iObs] + uGrad[2, 2]
 
+    return(DisplacementVector, StressTensor)
+
+
+def main():
+    # Name of Srcmod file to read
+    fileName = 's1999HECTOR01SALI'
+
+    # Parameters for CFS calculation and visualization
+    lambdaLame = 0.25 # First Lame parameter
+    muLame = 0.25 # shear modulus
+    alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
+    coefficientOfFriction = 0.4 # Coefficient of friction
+    obsDepth = -5e3; # depth of observation coordinates
+    nVecInPlane = [0, 1, 0]
+    nVecNormal = [1, 0, 0]
+    cfsUpperLimit = 5e-6; # for visualziation purposes
+    cfsLowerLimit = -5e-6; # for visualization purposes
+
+    # Observation coordinates
+    N = 20 # Number of grid points in x and y-directions for visualization
+    xVec = np.linspace(-50e3, 50e3, N)
+    yVec = np.linspace(-50e3, 50e3, N)
+    xMat, yMat = np.meshgrid(xVec, yVec)
+    xVec = xMat.reshape(xMat.size, 1)
+    yVec = yMat.reshape(yMat.size, 1)
+    zVec = obsDepth*np.ones(xVec.size)
+
+    # Read in Srcmod fault geometry and slip distribution for this representation of the event
+    S = readSrcmodFile(fileName)
+
+    # Calculate displacement vector and stress tensor at observation coordinates
+    DisplacementVector, StressTensor = calcOkadaDisplacementStress(xVec, yVec, zVec, S, alpha)
+
     # Resolve Coulomb failure stresses on reciever plane
     cfs = calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction)
-
-    # Reshape vectors as plain matrices for plotting
-    uxMat = np.reshape(DisplacementVector['ux'], xMat.shape)
-    uyMat = np.reshape(DisplacementVector['uy'], xMat.shape)
-    uzMat = np.reshape(DisplacementVector['uz'], xMat.shape)
-    uHorizontalMagMat = np.sqrt(uxMat**2.0 + uyMat**2.0);
-    sxxMat = np.reshape(StressTensor['sxx'], xMat.shape);
-    sxyMat = np.reshape(StressTensor['sxy'], xMat.shape);
-    sxzMat = np.reshape(StressTensor['sxz'], xMat.shape);
-    syyMat = np.reshape(StressTensor['syy'], xMat.shape);
-    syzMat = np.reshape(StressTensor['syz'], xMat.shape);
-    szzMat = np.reshape(StressTensor['szz'], xMat.shape);
 
     # Clip CFS values for plotting purposes
     cfsHighIdx1 = (cfs>cfsUpperLimit).nonzero()
@@ -233,25 +229,20 @@ def main():
     cfs[cfsLowIdx] = cfsLowerLimit
     cfsMat = np.reshape(cfs, xMat.shape)
 
-    # Pick a fill color proportional to slip magnitude
-    # slipMin = min(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
-    # slipMax = max(S, key=lambda x: x['slip'])['slip'] # Don't need thus yet but could be useful
-    # slipDiff = slipMax - slipMin
-    # nColors = 256;
-
-    fig = plt.figure()
-    ax2 = fig.gca()
-    origin = 'lower'
-    CS = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin=origin, hold='on')
+    # Generate figure showing fault geometry and CFS feild
+    fig = plt.figure(facecolor='white')
+    ax = fig.gca()
+    CS = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin='lower', hold='on')
     for iPatch in range(0, len(S)): # Plot the edges of each fault patch fault patches
-        ax2.plot([S[iPatch]['x1'], S[iPatch]['x2']], [S[iPatch]['y1'], S[iPatch]['y2']], color='black')
-        ax2.plot([S[iPatch]['x2'], S[iPatch]['x4']], [S[iPatch]['y2'], S[iPatch]['y4']], color='black')
-        ax2.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
-        ax2.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
+        ax.plot([S[iPatch]['x1'], S[iPatch]['x2']], [S[iPatch]['y1'], S[iPatch]['y2']], color='black')
+        ax.plot([S[iPatch]['x2'], S[iPatch]['x4']], [S[iPatch]['y2'], S[iPatch]['y4']], color='black')
+        ax.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
+        ax.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
 
     plt.title(fileName)
     plt.xlabel('x (m)')
     plt.ylabel('y (m)')
+    plt.axis('off') # turning off axes labels...will replace with scale bar
 
     # Make a colorbar for the ContourSet returned by the contourf call
     cbar = plt.colorbar(CS)
