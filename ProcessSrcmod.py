@@ -17,8 +17,31 @@ def readSrcmodFile(fileName):
     F = sio.loadmat(fileName + '.mat')
     F = F[fileName]
     F = F[0]
-    EventSrcmod = list() # Empty list
-    
+
+    # Declare fields to populate
+    EventSrcmod = dict() # Empty dictionary
+    EventSrcmod['angle'] = []
+    EventSrcmod['dip'] = []
+    EventSrcmod['length'] = []
+    EventSrcmod['rake'] = []
+    EventSrcmod['slip'] = []
+    EventSrcmod['slipDip'] = []
+    EventSrcmod['slipStrike'] = []
+    EventSrcmod['strike'] = []
+    EventSrcmod['width'] = []
+    EventSrcmod['x1'] = []
+    EventSrcmod['x2'] = []
+    EventSrcmod['x3'] = []
+    EventSrcmod['x4'] = []
+    EventSrcmod['y1'] = []
+    EventSrcmod['y2'] = []
+    EventSrcmod['y3'] = []
+    EventSrcmod['y4'] = []
+    EventSrcmod['z1'] = []
+    EventSrcmod['z2'] = []
+    EventSrcmod['z3'] = []
+    EventSrcmod['z4'] = []
+
     # Extract the fault geometry and slip into a single stucture of ungrouped patches
     nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
     for iPanel in range(1, nPanel + 1): # This index starts at 1 because of naming convention of the fields in the dictionary from the .mat file
@@ -53,58 +76,40 @@ def readSrcmodFile(fileName):
                 yTopCenter = F['seg' + str(iPanel) + 'geoY'][0][iDownDip][iAlongStrike]
                 zTopCenter = F['seg' + str(iPanel) + 'geoZ'][0][iDownDip][iAlongStrike]
             
-                # Calculate location of top corners
-                panel = dict()
-                panel['x1'] = xTopCenter + xTopOffset
-                panel['y1'] = yTopCenter + yTopOffset
-                panel['z1'] = zTopCenter - zTopOffset
-                panel['x2'] = xTopCenter - xTopOffset
-                panel['y2'] = yTopCenter - yTopOffset
-                panel['z2'] = zTopCenter - zTopOffset
+                # Calculate location of top corners and convert from km to m
+                EventSrcmod['x1'].append(km2m * (xTopCenter + xTopOffset))
+                EventSrcmod['y1'].append(km2m * (yTopCenter + yTopOffset))
+                EventSrcmod['z1'].append(km2m * (zTopCenter - zTopOffset)) # not sure this is right?!
+                EventSrcmod['x2'].append(km2m * (xTopCenter - xTopOffset))
+                EventSrcmod['y2'].append(km2m * (yTopCenter - yTopOffset))
+                EventSrcmod['z2'].append(km2m * (zTopCenter - zTopOffset))
 
-                # Calculate location of bottom corners
-                panel['x3'] = xTopCenter + xTopBottomOffset + xTopOffset
-                panel['y3'] = yTopCenter + yTopBottomOffset + yTopOffset
-                panel['z3'] = zTopCenter + zTopBottomOffset - zTopOffset
-                panel['x4'] = xTopCenter + xTopBottomOffset - xTopOffset
-                panel['y4'] = yTopCenter + yTopBottomOffset - yTopOffset
-                panel['z4'] = zTopCenter + zTopBottomOffset - zTopOffset
+                # Calculate location of bottom corners and convert from km to m
+                EventSrcmod['x3'].append(km2m * (xTopCenter + xTopBottomOffset + xTopOffset))
+                EventSrcmod['y3'].append(km2m * (yTopCenter + yTopBottomOffset + yTopOffset))
+                EventSrcmod['z3'].append(km2m * (zTopCenter + zTopBottomOffset - zTopOffset))
+                EventSrcmod['x4'].append(km2m * (xTopCenter + xTopBottomOffset - xTopOffset))
+                EventSrcmod['y4'].append(km2m * (yTopCenter + yTopBottomOffset - yTopOffset))
+                EventSrcmod['z4'].append(km2m * (zTopCenter + zTopBottomOffset - zTopOffset))
+            
+                # Extract patch dip, strike, width, and length
+                EventSrcmod['dip'].append(F['seg' + str(iPanel) + 'DipAn'])
+                EventSrcmod['strike'].append(F['seg' + str(iPanel) + 'AStke'])
+                EventSrcmod['rake'].append(F['seg' + str(iPanel) + 'RAKE'][0][iDownDip][iAlongStrike])
+                EventSrcmod['angle'].append(angle)
+                EventSrcmod['width'].append(km2m * W)
+                EventSrcmod['length'].append(km2m * L)
             
                 # Extract fault slip
-                panel['slip'] = F['seg' + str(iPanel) + 'SLIP'][0][iDownDip][iAlongStrike]
-
-                # Extract patch dip, strike, width, and length
-                panel['dip'] = F['seg' + str(iPanel) + 'DipAn']
-                panel['strike'] = F['seg' + str(iPanel) + 'AStke']
-                panel['rake'] = F['seg' + str(iPanel) + 'RAKE'][0][iDownDip][iAlongStrike]
-                panel['angle'] = angle
-                panel['width'] = W
-                panel['length'] = L
-            
-                # Convert all distance measurements from kilometers to meters
-                panel['x1'] = panel['x1'] * km2m
-                panel['x2'] = panel['x2'] * km2m
-                panel['x3'] = panel['x3'] * km2m
-                panel['x4'] = panel['x4'] * km2m
-                panel['y1'] = panel['y1'] * km2m
-                panel['y2'] = panel['y2'] * km2m
-                panel['y3'] = panel['y3'] * km2m
-                panel['y4'] = panel['y4'] * km2m
-                panel['z1'] = panel['z1'] * km2m
-                panel['z2'] = panel['z2'] * km2m
-                panel['z3'] = panel['z3'] * km2m
-                panel['z4'] = panel['z4'] * km2m
-                panel['width'] = panel['width'] * km2m
-                panel['length'] = panel['length'] * km2m
-            
-                # Convert slip from centimeters to meters
-                panel['slip'] = panel['slip'] * cm2m
-                rTemp = np.array([[math.cos(math.radians(panel['rake'])), -math.sin(math.radians(panel['rake']))], [math.sin(math.radians(panel['rake'])), math.cos(math.radians(panel['rake']))]])
-                xTempOrig = np.array([[panel['slip']], [0]])
+                EventSrcmod['slip'].append(cm2m*(F['seg' + str(iPanel) + 'SLIP'][0][iDownDip][iAlongStrike]))
+                rTemp = np.array([[math.cos(math.radians(EventSrcmod['rake'][-1])), 
+                                   -math.sin(math.radians(EventSrcmod['rake'][-1]))],
+                                  [math.sin(math.radians(EventSrcmod['rake'][-1])),
+                                   math.cos(math.radians(EventSrcmod['rake'][-1]))]])
+                xTempOrig = np.array([[EventSrcmod['slip'][-1]], [0]])
                 xTempRot = np.dot(rTemp, xTempOrig)
-                panel['slipStrike'] = xTempRot[0]
-                panel['slipDip'] = xTempRot[1]
-                EventSrcmod.append(panel)
+                EventSrcmod['slipStrike'].append(xTempRot[0])
+                EventSrcmod['slipDip'].append(xTempRot[1])
     return(EventSrcmod)
 
 def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
@@ -145,15 +150,18 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha):
     StressTensor['syz'] = np.zeros(xVec.size)
     StressTensor['szz'] = np.zeros(xVec.size)
 
-    for iPatch in range(0, len(EventSrcmod)):
-        print 'patch ' + str(iPatch+1) + ' of ' + str(len(EventSrcmod))
-        # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Loop over source patches
+        print 'patch ' + str(iPatch+1) + ' of ' + str(len(EventSrcmod['x1']))
+        # Loop over observation coordinates
         for iObs in range(0, len(xVec)):
             # Translate and (un)rotate observation coordinates
-            xTemp = xVec[iObs]-EventSrcmod[iPatch]['x1']
-            yTemp = yVec[iObs]-EventSrcmod[iPatch]['y1']
-            rTemp = np.array([[math.cos(math.radians(-EventSrcmod[iPatch]['angle'])), -math.sin(math.radians(-EventSrcmod[iPatch]['angle']))], [math.sin(math.radians(-EventSrcmod[iPatch]['angle'])), math.cos(math.radians(EventSrcmod[iPatch]['angle']))]])
-            xTempOrig = np.array([xTemp, yTemp]) # no need for brackets around x/yTemp because they are already arrays
+            xTemp = xVec[iObs]-EventSrcmod['x1'][iPatch]
+            yTemp = yVec[iObs]-EventSrcmod['y1'][iPatch]
+            rTemp = np.array([[math.cos(math.radians(-EventSrcmod['angle'][iPatch])), 
+                              -math.sin(math.radians(-EventSrcmod['angle'][iPatch]))],
+                              [math.sin(math.radians(-EventSrcmod['angle'][iPatch])),
+                               math.cos(math.radians(EventSrcmod['angle'][iPatch]))]])
+            xTempOrig = np.array([xTemp, yTemp])
             xTempRot = np.dot(rTemp, xTempOrig)
             xTemp = xTempRot[0]
             yTemp = xTempRot[1]
@@ -168,10 +176,10 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha):
             # dip_width = the along-dip range of the surface (aw1, aw2 in the original)
             # dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
             success, u, uGrad = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
-                                            EventSrcmod[iPatch]['z3'], EventSrcmod[iPatch]['dip'],
-                                            [0.0, EventSrcmod[iPatch]['length']],
-                                            [0.0, EventSrcmod[iPatch]['width']],
-                                            [EventSrcmod[iPatch]['slipStrike'], EventSrcmod[iPatch]['slipDip'], 0.0])
+                                            EventSrcmod['z3'][iPatch], EventSrcmod['dip'][iPatch],
+                                            [0.0, EventSrcmod['length'][iPatch]],
+                                            [0.0, EventSrcmod['width'][iPatch]],
+                                            [EventSrcmod['slipStrike'][iPatch], EventSrcmod['slipDip'][iPatch], 0.0])
             DisplacementVector['ux'][iObs] = DisplacementVector['ux'][iObs] + u[0]
             DisplacementVector['uy'][iObs] = DisplacementVector['uy'][iObs] + u[1]
             DisplacementVector['uz'][iObs] = DisplacementVector['uz'][iObs] + u[2]
@@ -233,19 +241,17 @@ def main():
     fig = plt.figure(facecolor='white')
     ax = fig.gca()
     cs = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin='lower', hold='on')
-    for iPatch in range(0, len(EventSrcmod)): # Plot the edges of each fault patch fault patches
-        ax.plot([EventSrcmod[iPatch]['x1'], EventSrcmod[iPatch]['x2']], [EventSrcmod[iPatch]['y1'], EventSrcmod[iPatch]['y2']], color='black')
-        ax.plot([EventSrcmod[iPatch]['x2'], EventSrcmod[iPatch]['x4']], [EventSrcmod[iPatch]['y2'], EventSrcmod[iPatch]['y4']], color='black')
-        ax.plot([EventSrcmod[iPatch]['x1'], EventSrcmod[iPatch]['x3']], [EventSrcmod[iPatch]['y1'], EventSrcmod[iPatch]['y3']], color='black')
-        ax.plot([EventSrcmod[iPatch]['x3'], EventSrcmod[iPatch]['x4']], [EventSrcmod[iPatch]['y3'], EventSrcmod[iPatch]['y4']], color='black')
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color='black')
+        ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color='black')
+        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color='black')
+        ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color='black')
 
     plt.title(fileName)
     plt.xlabel('x (m)')
     plt.ylabel('y (m)')
-    plt.axis('off') # turning off axes labels...will replace with scale bar
-
-    # Make a colorbar for the ContourSet returned by the contourf call
-    cbar = plt.colorbar(cs)
+    #plt.axis('off') # turning off axes labels...will replace with scale bar
+    cbar = plt.colorbar(cs) # Make a colorbar for the ContourSet returned by the contourf call
     cbar.ax.set_ylabel('CFS (Pa)')
     plt.show()
 
