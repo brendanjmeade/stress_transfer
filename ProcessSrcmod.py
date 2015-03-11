@@ -17,7 +17,7 @@ def readSrcmodFile(fileName):
     F = sio.loadmat(fileName + '.mat')
     F = F[fileName]
     F = F[0]
-    S = list() # Empty list
+    EventSrcmod = list() # Empty list
     
     # Extract the fault geometry and slip into a single stucture of ungrouped patches
     nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
@@ -104,8 +104,8 @@ def readSrcmodFile(fileName):
                 xTempRot = np.dot(rTemp, xTempOrig)
                 panel['slipStrike'] = xTempRot[0]
                 panel['slipDip'] = xTempRot[1]
-                S.append(panel)
-    return(S)
+                EventSrcmod.append(panel)
+    return(EventSrcmod)
 
 def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
     cfs = np.zeros(np.shape(StressTensor['sxx']))
@@ -131,7 +131,7 @@ def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
         cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
     return(cfs)
 
-def calcOkadaDisplacementStress(xVec, yVec, zVec, S, alpha):
+def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha):
     # Calculate elastic displacement field associated with one fault patch
     DisplacementVector = dict()
     DisplacementVector['ux'] = np.zeros(xVec.size)
@@ -145,14 +145,14 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, S, alpha):
     StressTensor['syz'] = np.zeros(xVec.size)
     StressTensor['szz'] = np.zeros(xVec.size)
 
-    for iPatch in range(0, len(S)):
-        print 'patch ' + str(iPatch+1) + ' of ' + str(len(S))
+    for iPatch in range(0, len(EventSrcmod)):
+        print 'patch ' + str(iPatch+1) + ' of ' + str(len(EventSrcmod))
         # Loop over observation coordinates and calculate displacements and stresses for each source/observation pair
         for iObs in range(0, len(xVec)):
             # Translate and (un)rotate observation coordinates
-            xTemp = xVec[iObs]-S[iPatch]['x1']
-            yTemp = yVec[iObs]-S[iPatch]['y1']
-            rTemp = np.array([[math.cos(math.radians(-S[iPatch]['angle'])), -math.sin(math.radians(-S[iPatch]['angle']))], [math.sin(math.radians(-S[iPatch]['angle'])), math.cos(math.radians(S[iPatch]['angle']))]])
+            xTemp = xVec[iObs]-EventSrcmod[iPatch]['x1']
+            yTemp = yVec[iObs]-EventSrcmod[iPatch]['y1']
+            rTemp = np.array([[math.cos(math.radians(-EventSrcmod[iPatch]['angle'])), -math.sin(math.radians(-EventSrcmod[iPatch]['angle']))], [math.sin(math.radians(-EventSrcmod[iPatch]['angle'])), math.cos(math.radians(EventSrcmod[iPatch]['angle']))]])
             xTempOrig = np.array([xTemp, yTemp]) # no need for brackets around x/yTemp because they are already arrays
             xTempRot = np.dot(rTemp, xTempOrig)
             xTemp = xTempRot[0]
@@ -168,10 +168,10 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, S, alpha):
             # dip_width = the along-dip range of the surface (aw1, aw2 in the original)
             # dislocation = 3-vector representing the direction of motion on the surface (DISL1, DISL2, DISL3)
             success, u, uGrad = dc3dwrapper(alpha, [xTemp, yTemp, zVec[iObs]],
-                                            S[iPatch]['z3'], S[iPatch]['dip'],
-                                            [0.0, S[iPatch]['length']],
-                                            [0.0, S[iPatch]['width']],
-                                            [S[iPatch]['slipStrike'], S[iPatch]['slipDip'], 0.0])
+                                            EventSrcmod[iPatch]['z3'], EventSrcmod[iPatch]['dip'],
+                                            [0.0, EventSrcmod[iPatch]['length']],
+                                            [0.0, EventSrcmod[iPatch]['width']],
+                                            [EventSrcmod[iPatch]['slipStrike'], EventSrcmod[iPatch]['slipDip'], 0.0])
             DisplacementVector['ux'][iObs] = DisplacementVector['ux'][iObs] + u[0]
             DisplacementVector['uy'][iObs] = DisplacementVector['uy'][iObs] + u[1]
             DisplacementVector['uz'][iObs] = DisplacementVector['uz'][iObs] + u[2]
@@ -210,10 +210,10 @@ def main():
     zVec = obsDepth*np.ones(xVec.size)
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
-    S = readSrcmodFile(fileName)
+    EventSrcmod = readSrcmodFile(fileName)
 
     # Calculate displacement vector and stress tensor at observation coordinates
-    DisplacementVector, StressTensor = calcOkadaDisplacementStress(xVec, yVec, zVec, S, alpha)
+    DisplacementVector, StressTensor = calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha)
 
     # Resolve Coulomb failure stresses on reciever plane
     cfs = calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction)
@@ -232,12 +232,12 @@ def main():
     # Generate figure showing fault geometry and CFS feild
     fig = plt.figure(facecolor='white')
     ax = fig.gca()
-    CS = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin='lower', hold='on')
-    for iPatch in range(0, len(S)): # Plot the edges of each fault patch fault patches
-        ax.plot([S[iPatch]['x1'], S[iPatch]['x2']], [S[iPatch]['y1'], S[iPatch]['y2']], color='black')
-        ax.plot([S[iPatch]['x2'], S[iPatch]['x4']], [S[iPatch]['y2'], S[iPatch]['y4']], color='black')
-        ax.plot([S[iPatch]['x1'], S[iPatch]['x3']], [S[iPatch]['y1'], S[iPatch]['y3']], color='black')
-        ax.plot([S[iPatch]['x3'], S[iPatch]['x4']], [S[iPatch]['y3'], S[iPatch]['y4']], color='black')
+    cs = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin='lower', hold='on')
+    for iPatch in range(0, len(EventSrcmod)): # Plot the edges of each fault patch fault patches
+        ax.plot([EventSrcmod[iPatch]['x1'], EventSrcmod[iPatch]['x2']], [EventSrcmod[iPatch]['y1'], EventSrcmod[iPatch]['y2']], color='black')
+        ax.plot([EventSrcmod[iPatch]['x2'], EventSrcmod[iPatch]['x4']], [EventSrcmod[iPatch]['y2'], EventSrcmod[iPatch]['y4']], color='black')
+        ax.plot([EventSrcmod[iPatch]['x1'], EventSrcmod[iPatch]['x3']], [EventSrcmod[iPatch]['y1'], EventSrcmod[iPatch]['y3']], color='black')
+        ax.plot([EventSrcmod[iPatch]['x3'], EventSrcmod[iPatch]['x4']], [EventSrcmod[iPatch]['y3'], EventSrcmod[iPatch]['y4']], color='black')
 
     plt.title(fileName)
     plt.xlabel('x (m)')
@@ -245,7 +245,7 @@ def main():
     plt.axis('off') # turning off axes labels...will replace with scale bar
 
     # Make a colorbar for the ContourSet returned by the contourf call
-    cbar = plt.colorbar(CS)
+    cbar = plt.colorbar(cs)
     cbar.ax.set_ylabel('CFS (Pa)')
     plt.show()
 
