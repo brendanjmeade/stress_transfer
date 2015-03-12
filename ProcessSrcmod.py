@@ -136,8 +136,11 @@ def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
         cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
     return(cfs)
 
-def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha):
-    # Calculate elastic displacement field associated with one fault patch
+def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame):
+    # 
+    alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
+
+    # Calculate elastic displacement and stress fields associated with all fault patches
     DisplacementVector = dict()
     DisplacementVector['ux'] = np.zeros(xVec.size)
     DisplacementVector['uy'] = np.zeros(xVec.size)
@@ -180,15 +183,29 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha):
                                             [0.0, EventSrcmod['length'][iPatch]],
                                             [0.0, EventSrcmod['width'][iPatch]],
                                             [EventSrcmod['slipStrike'][iPatch], EventSrcmod['slipDip'][iPatch], 0.0])
-            DisplacementVector['ux'][iObs] = DisplacementVector['ux'][iObs] + u[0]
-            DisplacementVector['uy'][iObs] = DisplacementVector['uy'][iObs] + u[1]
-            DisplacementVector['uz'][iObs] = DisplacementVector['uz'][iObs] + u[2]
-            StressTensor['sxx'][iObs] = StressTensor['sxx'][iObs] + uGrad[0, 0]
-            StressTensor['sxy'][iObs] = StressTensor['sxy'][iObs] + 0.5*(uGrad[0, 1] + uGrad[1, 0])
-            StressTensor['sxz'][iObs] = StressTensor['sxz'][iObs] + 0.5*(uGrad[0, 2] + uGrad[2, 0])
-            StressTensor['syy'][iObs] = StressTensor['syy'][iObs] + uGrad[1, 1]
-            StressTensor['syz'][iObs] = StressTensor['syz'][iObs] + 0.5*(uGrad[1, 2] + uGrad[2, 1])
-            StressTensor['szz'][iObs] = StressTensor['szz'][iObs] + uGrad[2, 2]
+            DisplacementVector['ux'][iObs] += u[0]
+            DisplacementVector['uy'][iObs] += u[1]
+            DisplacementVector['uz'][iObs] += u[2]
+            strainSxx = uGrad[0, 0]
+            strainSxy = 0.5*(uGrad[0, 1] + uGrad[1, 0])
+            strainSxz = 0.5*(uGrad[0, 2] + uGrad[2, 0])
+            strainSyy = uGrad[1, 1]
+            strainSyz = 0.5*(uGrad[1, 2] + uGrad[2, 1])
+            strainSzz = uGrad[2, 2]
+            StressTensor['sxx'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSxx
+            StressTensor['sxy'][iObs] += 2*muLame*strainSxy
+            StressTensor['sxz'][iObs] += 2*muLame*strainSxz
+            StressTensor['syy'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSyy
+            StressTensor['syz'][iObs] += 2*muLame*strainSyz
+            StressTensor['szz'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSzz
+
+            # StressTensor['sxx'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSxx
+            # StressTensor['sxy'][iObs] += 0.5*(uGrad[0, 1] + uGrad[1, 0])
+            # StressTensor['sxz'][iObs] += 0.5*(uGrad[0, 2] + uGrad[2, 0])
+            # StressTensor['syy'][iObs] += uGrad[1, 1]
+            # StressTensor['syz'][iObs] += 0.5*(uGrad[1, 2] + uGrad[2, 1])
+            # StressTensor['szz'][iObs] += uGrad[2, 2]
+
 
     return(DisplacementVector, StressTensor)
 
@@ -198,30 +215,32 @@ def main():
     fileName = 's1999HECTOR01SALI'
 
     # Parameters for CFS calculation and visualization
-    lambdaLame = 0.25 # First Lame parameter
-    muLame = 0.25 # shear modulus
-    alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
+    lambdaLame = 3e10 # First Lame parameter (Pascals)
+    muLame = 3e10 # Second Lame parameter (shear modulus, Pascals)
     coefficientOfFriction = 0.4 # Coefficient of friction
     obsDepth = -5e3; # depth of observation coordinates
     nVecInPlane = [0, 1, 0]
     nVecNormal = [1, 0, 0]
-    cfsUpperLimit = 5e-6; # for visualziation purposes
-    cfsLowerLimit = -5e-6; # for visualization purposes
+    cfsUpperLimit = 1e5; # for visualziation purposes
+    cfsLowerLimit = -1e5; # for visualization purposes
 
-    # Observation coordinates
-    N = 20 # Number of grid points in x and y-directions for visualization
-    xVec = np.linspace(-50e3, 50e3, N)
-    yVec = np.linspace(-50e3, 50e3, N)
-    xMat, yMat = np.meshgrid(xVec, yVec)
-    xVec = xMat.reshape(xMat.size, 1)
-    yVec = yMat.reshape(yMat.size, 1)
+    # Observation coordinates on a circular grid
+    n_angles = 300
+    n_radii = 300
+    radii = np.linspace(0, 1, n_radii)
+    radii = 100e3 * np.sqrt(radii)
+    angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
+    angles = np.repeat(angles[..., np.newaxis], n_radii, axis=1)
+    angles[:, 1::2] += math.pi/n_angles
+    xVec = (radii*np.cos(angles)).flatten()
+    yVec = (radii*np.sin(angles)).flatten()
     zVec = obsDepth*np.ones(xVec.size)
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
 
     # Calculate displacement vector and stress tensor at observation coordinates
-    DisplacementVector, StressTensor = calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, alpha)
+    DisplacementVector, StressTensor = calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame)
 
     # Resolve Coulomb failure stresses on reciever plane
     cfs = calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction)
@@ -235,24 +254,30 @@ def main():
     cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
     cfs[cfsHighIdx] = cfsUpperLimit
     cfs[cfsLowIdx] = cfsLowerLimit
-    cfsMat = np.reshape(cfs, xMat.shape)
 
     # Generate figure showing fault geometry and CFS feild
     fig = plt.figure(facecolor='white')
     ax = fig.gca()
-    cs = plt.contourf(xMat, yMat, cfsMat, 10, cmap=cm.coolwarm, origin='lower', hold='on')
+    cs = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 0, linewidth=4.0, colors='w', origin='lower', hold='on')
+    cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 10, cmap=cm.coolwarm, origin='lower', hold='on', extend='both')
+
     for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
-        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color='black')
-        ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color='black')
-        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color='black')
-        ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color='black')
+        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+
+    # Plot scale bar
+    ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=3)
+    ax.text(-75e3, -105e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
 
     plt.title(fileName)
     plt.xlabel('x (m)')
     plt.ylabel('y (m)')
-    #plt.axis('off') # turning off axes labels...will replace with scale bar
-    cbar = plt.colorbar(cs) # Make a colorbar for the ContourSet returned by the contourf call
-    cbar.ax.set_ylabel('CFS (Pa)')
+    plt.axis('equal')
+    plt.axis('off') # turning off axes labels...replaced with scale bar
+    cbar = plt.colorbar(cs,  shrink=0.4, pad=0.0, aspect=20.0) # Make a colorbar for the ContourSet returned by the contourf call
+    cbar.ax.set_ylabel('CFS (MPa)')
     plt.show()
 
     # Provide keyboard control to interact with variables
