@@ -4,8 +4,6 @@ import code
 from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
 import datetime
-#from mpl_toolkits.mplot3d import Axes3D
-#from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
