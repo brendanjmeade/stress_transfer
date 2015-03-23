@@ -3,8 +3,9 @@ import numpy as np
 import code
 from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.collections import PolyCollection
+import datetime
+#from mpl_toolkits.mplot3d import Axes3D
+#from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
@@ -41,6 +42,21 @@ def readSrcmodFile(fileName):
     EventSrcmod['z2'] = []
     EventSrcmod['z3'] = []
     EventSrcmod['z4'] = []
+
+    # Extract values that are universal for the entire rupture
+    EventSrcmod['latitude'] = F['evLAT'][0][0][0]
+    EventSrcmod['longitude'] = F['evLON'][0][0][0]
+    EventSrcmod['depth'] = F['evDPT'][0][0][0]
+    EventSrcmod['date'] = F['evDAT'][0][0]
+    EventSrcmod['tag'] = F['evTAG'][0][0] # pretty much the same as the filename
+    EventSrcmod['description'] = F['event'][0][0]
+    EventSrcmod['magnitude'] = F['srcMwMoS'][0][0][0]
+    EventSrcmod['moment'] = F['srcMwMoS'][0][0][1]
+    EventSrcmod['flinnEngdahlRegionNo'] = F['FEregionNo'][0][0]
+    EventSrcmod['flinnEngdahlRegion'] = F['FEregion'][0][0]
+
+    # Convert date string to datetime object
+    EventSrcmod['datetime'] = datetime.datetime.strptime(EventSrcmod['date'], '%m/%d/%Y')
 
     # Extract the fault geometry and slip into a single stucture of ungrouped patches
     nPanel = int(F['invSEGM'][0][0][0]) # Count number of panels
@@ -137,7 +153,7 @@ def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
     return(cfs)
 
 def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame):
-    # 
+    # Define the material parameter that Okada's Greens functions is sensitive too
     alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
 
     # Calculate elastic displacement and stress fields associated with all fault patches
@@ -155,8 +171,7 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
 
     for iPatch in range(0, len(EventSrcmod['x1'])): # Loop over source patches
         print 'patch ' + str(iPatch+1) + ' of ' + str(len(EventSrcmod['x1']))
-        # Loop over observation coordinates
-        for iObs in range(0, len(xVec)):
+        for iObs in range(0, len(xVec)): # Loop over observation coordinates
             # Translate and (un)rotate observation coordinates
             xTemp = xVec[iObs]-EventSrcmod['x1'][iPatch]
             yTemp = yVec[iObs]-EventSrcmod['y1'][iPatch]
@@ -199,14 +214,6 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
             StressTensor['syz'][iObs] += 2*muLame*strainSyz
             StressTensor['szz'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSzz
 
-            # StressTensor['sxx'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSxx
-            # StressTensor['sxy'][iObs] += 0.5*(uGrad[0, 1] + uGrad[1, 0])
-            # StressTensor['sxz'][iObs] += 0.5*(uGrad[0, 2] + uGrad[2, 0])
-            # StressTensor['syy'][iObs] += uGrad[1, 1]
-            # StressTensor['syz'][iObs] += 0.5*(uGrad[1, 2] + uGrad[2, 1])
-            # StressTensor['szz'][iObs] += uGrad[2, 2]
-
-
     return(DisplacementVector, StressTensor)
 
 
@@ -225,8 +232,8 @@ def main():
     cfsLowerLimit = -1e5; # for visualization purposes
 
     # Observation coordinates on a circular grid
-    n_angles = 300
-    n_radii = 300
+    n_angles = 30
+    n_radii = 30
     radii = np.linspace(0, 1, n_radii)
     radii = 100e3 * np.sqrt(radii)
     angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
@@ -255,11 +262,16 @@ def main():
     cfs[cfsHighIdx] = cfsUpperLimit
     cfs[cfsLowIdx] = cfsLowerLimit
 
-    # Generate figure showing fault geometry and CFS feild
+    # Generate figure showing fault geometry and CFS field
     fig = plt.figure(facecolor='white')
     ax = fig.gca()
-    cs = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 0, linewidth=4.0, colors='w', origin='lower', hold='on')
-    cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 10, cmap=cm.coolwarm, origin='lower', hold='on', extend='both')
+    cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
+    cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 0, linewidths=1.0, colors='w', origin='lower', hold='on')
+
+    # Draw a black line around the CFS field
+    xCircle = 100e3*np.cos(np.arange(0, 2*np.pi+0.01, 0.01))
+    yCircle = 100e3*np.sin(np.arange(0, 2*np.pi+0.01, 0.01))
+    ax.plot(xCircle, yCircle, color=[0.0, 0.0, 0.0], linewidth=1.0)
 
     for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
         ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
@@ -268,16 +280,26 @@ def main():
         ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
 
     # Plot scale bar
-    ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=3)
-    ax.text(-75e3, -105e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
+    ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.text(-75e3, -110e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
 
+    # Plot orientation of reciever plane
+    ax.plot([75e3, 75e3 + 10e3*nVecInPlane[0]], [-100e3, -100e3 + 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.plot([75e3, 75e3 - 10e3*nVecInPlane[0]], [-100e3, -100e3 - 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.plot(75e3, -100e3, color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
+
+    # Standard decorations
     plt.title(fileName)
     plt.xlabel('x (m)')
     plt.ylabel('y (m)')
     plt.axis('equal')
     plt.axis('off') # turning off axes labels...replaced with scale bar
-    cbar = plt.colorbar(cs,  shrink=0.4, pad=0.0, aspect=20.0) # Make a colorbar for the ContourSet returned by the contourf call
-    cbar.ax.set_ylabel('CFS (MPa)')
+    cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
+                        orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
+    cbar.ax.set_xlabel('CFS (MPa)')
+    cbar.ax.tick_params(length=0)
+    ax.set_ylim([-110e3, 120e3])
+    ax.set_xlim([-110e3, 110e3])
     plt.show()
 
     # Provide keyboard control to interact with variables
