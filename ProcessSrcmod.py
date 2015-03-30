@@ -1,11 +1,97 @@
 import math
-import numpy as np
 import code
+import datetime
+import urllib
+import os.path
+import numpy as np
+import matplotlib.pyplot as plt
 from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
-import datetime
-import matplotlib.pyplot as plt
 from matplotlib import cm
+from mpl_toolkits.basemap import Basemap
+
+
+# Function to check to see if a string can be converted into a float.  Useful for error checking.
+def isNumber(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
+
+# Function to either load or request and load ISC event catalog between two different dates
+def GetIscEventCatalog(startDateTime, endDateTime):
+    print 'ISC earthquake catalog data from ' + \
+          'start day: ' + startDateTime.strftime('%d/%m/%Y %H:%M:%S') + ' to '\
+          'end day', endDateTime.strftime('%d/%m/%Y %H:%M:%S')
+    outputFileNameCsvDated = 'iscsearch_complete_' + \
+                             startDateTime.strftime('%d_%m_%Y_%H_%M_%S') + \
+                             endDateTime.strftime('_%d_%m_%Y_%H_%M_%S') + '.csv'
+
+    # Does file exist for these search parameters?  If so use.  If not create from ISC server.
+    if os.path.isfile(outputFileNameCsvDated):
+        print '    File: ' + outputFileNameCsvDated + ' already exists locally. Using local file.'
+
+    else:
+        print '    File: ' + outputFileNameCsvDated + ' does not exist locally. Requesting data from ISC server.'
+        composedUrl = 'http://colossus.iris.washington.edu/cgi-bin/web-db-v4?request=COMPREHENSIVE&out_format=CATCSV&bot_lat=&top_lat=&left_lon=&right_lon=&ctr_lat=&ctr_lon=&radius=&max_dist_units=deg&searchshape=GLOBAL&srn=&grn=' + \
+                      '&start_year=' + startDateTime.strftime('%Y') + \
+                      '&start_month=' + startDateTime.strftime('%m') + \
+                      '&start_day=' + startDateTime.strftime('%d') + \
+                      '&start_time=' + startDateTime.strftime('%H') + '%3A' + startDateTime.strftime('%M') + '%3A' +  startDateTime.strftime('%S') + \
+                      '&end_year=' + endDateTime.strftime('%Y') + \
+                      '&end_month=' + endDateTime.strftime('%m') + \
+                      '&end_day=' + endDateTime.strftime('%d') + \
+                      '&end_time=' + endDateTime.strftime('%H') + '%3A' + endDateTime.strftime('%M') + '%3A' +  endDateTime.strftime('%S') + \
+                      '&min_dep=&max_dep=&min_mag=&max_mag=&null_mag=on&req_mag_type=Any&req_mag_agcy=Any&include_links=off'
+        urllib.urlretrieve(composedUrl, outputFileNameCsvDated)
+        print '    File: ' + outputFileNameCsvDated + ' generated from ISC server request'
+
+    # Read in downloaded file  
+    lines = [line.strip() for line in open(outputFileNameCsvDated)]
+    startLineIdx = 29 # Start processing at this line to avoid header
+    endLineIdx = np.shape(lines)[0]-5 # Stop processing at this line to avoid footer
+
+    # Dictionary for storing catalog of events
+    catalog = dict()
+    catalog['yr'] = []
+    catalog['mon'] = []
+    catalog['day'] = []
+    catalog['hr'] = []
+    catalog['min'] = []
+    catalog['sec'] = []
+    catalog['latitude'] = []
+    catalog['longitude'] = []
+    catalog['depth'] = []
+    catalog['magnitude'] = []
+    catalog['datetime'] = []
+
+    for i in range(startLineIdx, endLineIdx):
+        firstCommaIndex = lines[i].index(',')
+        firstCommaOffset = firstCommaIndex - 7 # 7 is the default value that all other indices are relative to
+
+        # Make sure there is both a depth and a magnitude given
+        depthGiven = (isNumber(lines[i][61+firstCommaOffset:65+firstCommaOffset]) == True)
+        magnitudeGiven = (isNumber(lines[i][91+firstCommaOffset:94+firstCommaOffset]) == True)
+        processCurrentLine = depthGiven & magnitudeGiven
+
+        if processCurrentLine: # If depth and magnitude are present process the event
+            catalog['yr'].append(lines[i][18+firstCommaOffset:22+firstCommaOffset])
+            catalog['mon'].append(lines[i][23+firstCommaOffset:25+firstCommaOffset])
+            catalog['day'].append(lines[i][26+firstCommaOffset:28+firstCommaOffset])
+            catalog['hr'].append(lines[i][29+firstCommaOffset:31+firstCommaOffset])
+            catalog['min'].append(lines[i][32+firstCommaOffset:34+firstCommaOffset])
+            catalog['sec'].append(lines[i][35+firstCommaOffset:37+firstCommaOffset])
+            catalog['latitude'].append(float(lines[i][42+firstCommaOffset:49+firstCommaOffset]))
+            catalog['longitude'].append(float(lines[i][50+firstCommaOffset:59+firstCommaOffset]))
+            catalog['depth'].append(float(lines[i][61+firstCommaOffset:65+firstCommaOffset]))
+            catalog['magnitude'].append(float(lines[i][91+firstCommaOffset:94+firstCommaOffset]))
+            catalog['datetime'].append(datetime.datetime.strptime(catalog['yr'][-1] + ' ' + catalog['mon'][-1] + ' ' + catalog['day'][-1] + ' ' + 
+                                                                  catalog['hr'][-1] + ' ' + catalog['min'][-1] + ' ' + catalog['sec'][-1], 
+                                                                  '%Y %m %d %H %M %S'))
+    return(catalog)
+
 
 def readSrcmodFile(fileName):
     # Constants for changing dimensions
@@ -299,6 +385,35 @@ def main():
     ax.set_ylim([-110e3, 120e3])
     ax.set_xlim([-110e3, 110e3])
     plt.show()
+
+
+    # Read in ISC data
+    startYear = 1999
+    startMonth = 10
+    startDay = 16
+    captureDays = 10
+    startDateTime = datetime.datetime(startYear, startMonth, startDay, 0, 0, 0)
+    endDateTime = startDateTime + datetime.timedelta(days=captureDays) - datetime.timedelta(seconds=1)
+    catalog = GetIscEventCatalog(startDateTime, endDateTime)
+
+    # Plot ISC locations
+    plt.scatter(catalog['longitude'], catalog['latitude'], alpha=0.5)
+    plt.show()
+
+    # m = Basemap(llcrnrlon=0,llcrnrlat=-80,urcrnrlon=360,urcrnrlat=80,projection='mill')
+    # m.drawcoastlines()
+    # m.drawcountries()
+    # parallels = np.arange(-90, 90, 30) # draw parallels.
+    # m.drawparallels(parallels,labels=[1,0,0,0],fontsize=10)
+    # meridians = np.arange(0.0, 360.0, 30) # draw meridians
+    # m.drawmeridians(meridians,labels=[0,0,0,1],fontsize=10)
+    # x, y = m(catalog['longitude'], catalog['latitude'])
+    # m.scatter(x, y, 3, marker='o', color='r')
+    # plt.show()
+
+    #plt.scatter(catalog['datetime'], catalog['magnitude'], alpha=0.5)
+    #plt.show()
+
 
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
