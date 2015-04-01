@@ -2,6 +2,7 @@ import math
 import code
 import datetime
 import urllib
+import utm
 import os.path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,6 +10,9 @@ from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
 from matplotlib import cm
 from mpl_toolkits.basemap import Basemap
+from matplotlib.pyplot import show
+import mpl_toolkits.basemap.pyproj as pyproj
+
 
 
 # Function to check to see if a string can be converted into a float.  Useful for error checking.
@@ -21,7 +25,7 @@ def isNumber(s):
 
 
 # Function to either load or request and load ISC event catalog between two different dates
-def GetIscEventCatalog(startDateTime, endDateTime):
+def getIscEventCatalog(startDateTime, endDateTime):
     print 'ISC earthquake catalog data from ' + \
           'start day: ' + startDateTime.strftime('%d/%m/%Y %H:%M:%S') + ' to '\
           'end day', endDateTime.strftime('%d/%m/%Y %H:%M:%S')
@@ -126,10 +130,12 @@ def readSrcmodFile(fileName):
     EventSrcmod['z2'] = []
     EventSrcmod['z3'] = []
     EventSrcmod['z4'] = []
+    EventSrcmod['patchLongitude'] = []
+    EventSrcmod['patchLatitude'] = []
 
     # Extract values that are universal for the entire rupture
-    EventSrcmod['latitude'] = F['evLAT'][0][0][0]
-    EventSrcmod['longitude'] = F['evLON'][0][0][0]
+    EventSrcmod['epicenterLatitude'] = F['evLAT'][0][0][0]
+    EventSrcmod['epicenterLongitude'] = F['evLON'][0][0][0]
     EventSrcmod['depth'] = F['evDPT'][0][0][0]
     EventSrcmod['date'] = F['evDAT'][0][0]
     EventSrcmod['tag'] = F['evTAG'][0][0] # pretty much the same as the filename
@@ -175,6 +181,8 @@ def readSrcmodFile(fileName):
                 xTopCenter = F['seg' + str(iPanel) + 'geoX'][0][iDownDip][iAlongStrike]
                 yTopCenter = F['seg' + str(iPanel) + 'geoY'][0][iDownDip][iAlongStrike]
                 zTopCenter = F['seg' + str(iPanel) + 'geoZ'][0][iDownDip][iAlongStrike]
+                EventSrcmod['patchLongitude'].append(F['seg' + str(iPanel) + 'geoLON'][0][iDownDip][iAlongStrike])
+                EventSrcmod['patchLatitude'].append(F['seg' + str(iPanel) + 'geoLAT'][0][iDownDip][iAlongStrike])
             
                 # Calculate location of top corners and convert from km to m
                 EventSrcmod['x1'].append(km2m * (xTopCenter + xTopOffset))
@@ -212,6 +220,7 @@ def readSrcmodFile(fileName):
                 EventSrcmod['slipDip'].append(xTempRot[1])
     return(EventSrcmod)
 
+
 def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
     cfs = np.zeros(np.shape(StressTensor['sxx']))
     for iObs in range(0, len(StressTensor['sxx'])):
@@ -235,6 +244,7 @@ def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
                       StressTensor['szz'][iObs] * nVecNormal[2] * nVecNormal[2])
         cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
     return(cfs)
+
 
 def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame):
     # Define the material parameter that Okada's Greens functions is sensitive too
@@ -316,8 +326,9 @@ def main():
     cfsLowerLimit = -1e5; # for visualization purposes
 
     # Observation coordinates on a circular grid
-    n_angles = 30
-    n_radii = 30
+    plotFigures = False
+    n_angles = 10
+    n_radii = 10
     radii = np.linspace(0, 1, n_radii)
     radii = 100e3 * np.sqrt(radii)
     angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
@@ -347,44 +358,45 @@ def main():
     cfs[cfsLowIdx] = cfsLowerLimit
 
     # Generate figure showing fault geometry and CFS field
-    fig = plt.figure(facecolor='white')
-    ax = fig.gca()
-    cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
-    cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 0, linewidths=1.0, colors='w', origin='lower', hold='on')
+    if plotFigures:
+        plt.close('all')
+        fig = plt.figure(facecolor='white')
+        ax = fig.gca()
+        cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
+        cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 0, linewidths=1.0, colors='w', origin='lower', hold='on')
 
-    # Draw a black line around the CFS field
-    xCircle = 100e3*np.cos(np.arange(0, 2*np.pi+0.01, 0.01))
-    yCircle = 100e3*np.sin(np.arange(0, 2*np.pi+0.01, 0.01))
-    ax.plot(xCircle, yCircle, color=[0.0, 0.0, 0.0], linewidth=1.0)
+        # Draw a black line around the CFS field
+        xCircle = 100e3*np.cos(np.arange(0, 2*np.pi+0.01, 0.01))
+        yCircle = 100e3*np.sin(np.arange(0, 2*np.pi+0.01, 0.01))
+        ax.plot(xCircle, yCircle, color=[0.0, 0.0, 0.0], linewidth=1.0)
 
-    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
-        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-        ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-        ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+            ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+            ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+            ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+            ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
 
-    # Plot scale bar
-    ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.text(-75e3, -110e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
+        # Plot scale bar
+        ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=1)
+        ax.text(-75e3, -110e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
 
-    # Plot orientation of reciever plane
-    ax.plot([75e3, 75e3 + 10e3*nVecInPlane[0]], [-100e3, -100e3 + 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.plot([75e3, 75e3 - 10e3*nVecInPlane[0]], [-100e3, -100e3 - 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.plot(75e3, -100e3, color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
+        # Plot orientation of reciever plane
+        ax.plot([75e3, 75e3 + 10e3*nVecInPlane[0]], [-100e3, -100e3 + 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
+        ax.plot([75e3, 75e3 - 10e3*nVecInPlane[0]], [-100e3, -100e3 - 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
+        ax.plot(75e3, -100e3, color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
 
-    # Standard decorations
-    plt.title(fileName)
-    plt.xlabel('x (m)')
-    plt.ylabel('y (m)')
-    plt.axis('equal')
-    plt.axis('off') # turning off axes labels...replaced with scale bar
-    cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
-                        orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
-    cbar.ax.set_xlabel('CFS (MPa)')
-    cbar.ax.tick_params(length=0)
-    ax.set_ylim([-110e3, 120e3])
-    ax.set_xlim([-110e3, 110e3])
-    plt.show()
+        # Standard decorations
+        plt.title(fileName)
+        plt.xlabel('x (m)')
+        plt.ylabel('y (m)')
+        plt.axis('equal')
+        plt.axis('off') # turning off axes labels...replaced with scale bar
+        cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
+                            orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
+        cbar.ax.set_xlabel('CFS (MPa)')
+        cbar.ax.tick_params(length=0)
+        ax.set_ylim([-110e3, 120e3])
+        ax.set_xlim([-110e3, 110e3])
 
 
     # Read in ISC data
@@ -394,26 +406,49 @@ def main():
     captureDays = 10
     startDateTime = datetime.datetime(startYear, startMonth, startDay, 0, 0, 0)
     endDateTime = startDateTime + datetime.timedelta(days=captureDays) - datetime.timedelta(seconds=1)
-    catalog = GetIscEventCatalog(startDateTime, endDateTime)
+    Catalog = getIscEventCatalog(startDateTime, endDateTime)
 
-    # Plot ISC locations
-    plt.scatter(catalog['longitude'], catalog['latitude'], alpha=0.5)
+    if plotFigures:
+        # Plot ISC locations
+        fig2 = plt.figure(facecolor='white')
+        plt.scatter(Catalog['longitude'], Catalog['latitude'], alpha=0.5)
+        plt.scatter(EventSrcmod['patchLongitude'], EventSrcmod['patchLatitude'], alpha=0.5, color='red')
+        #plt.show()
+
+        # m = Basemap(llcrnrlon=0,llcrnrlat=-80,urcrnrlon=360,urcrnrlat=80,projection='mill')
+        # m.drawcoastlines()
+        # m.drawcountries()
+        # parallels = np.arange(-90, 90, 30) # draw parallels.
+        # m.drawparallels(parallels,labels=[1,0,0,0],fontsize=10)
+        # meridians = np.arange(0.0, 360.0, 30) # draw meridians
+        # m.drawmeridians(meridians,labels=[0,0,0,1],fontsize=10)
+        # x, y = m(catalog['longitude'], catalog['latitude'])
+        # m.scatter(x, y, 3, marker='o', color='r')
+        # plt.show()
+
+        #plt.scatter(catalog['datetime'], catalog['magnitude'], alpha=0.5)
+        #plt.show()
+
+
+    # Find UTM zone of current SRCMOD event
+    print ' '
+    # Note lat, lon ordering of arguments in this line only
+    _, _, zoneNumber, zoneLetter = utm.from_latlon(EventSrcmod['epicenterLatitude'], EventSrcmod['epicenterLongitude'])
+    projEpicenter = pyproj.Proj(proj='utm', zone=str(zoneNumber) + zoneLetter, ellps='WGS84')
+    epicenterXUtm, epicenterYUtm = projEpicenter(EventSrcmod['epicenterLongitude'], EventSrcmod['epicenterLatitude'])
+    xUtm, yUtm = projEpicenter(Catalog['longitude'], Catalog['latitude'])
+
+
+    patchXUtm, patchYUtm = projEpicenter(EventSrcmod['patchLongitude'], EventSrcmod['patchLatitude'], inverse=False)
+    fig3 = plt.figure(facecolor='white')
+    ax = fig3.gca()
+    ax.plot(patchXUtm, patchYUtm, marker='x', color='blue', linestyle='None')
+    ax.plot(epicenterXUtm, epicenterYUtm, marker='x', color='red', linestyle='None')
+    ax.plot(xUtm, yUtm, marker='.', color='green', linestyle='None')
+    plt.axis('equal')
+    ax.set_xlim([epicenterXUtm-100e3, epicenterXUtm+100e3])
+    ax.set_ylim([epicenterYUtm-100e3, epicenterYUtm+100e3])
     plt.show()
-
-    # m = Basemap(llcrnrlon=0,llcrnrlat=-80,urcrnrlon=360,urcrnrlat=80,projection='mill')
-    # m.drawcoastlines()
-    # m.drawcountries()
-    # parallels = np.arange(-90, 90, 30) # draw parallels.
-    # m.drawparallels(parallels,labels=[1,0,0,0],fontsize=10)
-    # meridians = np.arange(0.0, 360.0, 30) # draw meridians
-    # m.drawmeridians(meridians,labels=[0,0,0,1],fontsize=10)
-    # x, y = m(catalog['longitude'], catalog['latitude'])
-    # m.scatter(x, y, 3, marker='o', color='r')
-    # plt.show()
-
-    #plt.scatter(catalog['datetime'], catalog['magnitude'], alpha=0.5)
-    #plt.show()
-
 
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
