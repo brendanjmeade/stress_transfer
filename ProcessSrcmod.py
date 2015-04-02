@@ -133,6 +133,20 @@ def readSrcmodFile(fileName):
     EventSrcmod['patchLongitude'] = []
     EventSrcmod['patchLatitude'] = []
 
+    # Calculated in UTM coordinates after everything else has been calculated
+    EventSrcmod['x1Utm'] = []
+    EventSrcmod['x2Utm'] = []
+    EventSrcmod['x3Utm'] = []
+    EventSrcmod['x4Utm'] = []
+    EventSrcmod['y1Utm'] = []
+    EventSrcmod['y2Utm'] = []
+    EventSrcmod['y3Utm'] = []
+    EventSrcmod['y4Utm'] = []
+    EventSrcmod['z1Utm'] = []
+    EventSrcmod['z2Utm'] = []
+    EventSrcmod['z3Utm'] = []
+    EventSrcmod['z4Utm'] = []
+
     # Extract values that are universal for the entire rupture
     EventSrcmod['epicenterLatitude'] = F['evLAT'][0][0][0]
     EventSrcmod['epicenterLongitude'] = F['evLON'][0][0][0]
@@ -144,6 +158,12 @@ def readSrcmodFile(fileName):
     EventSrcmod['moment'] = F['srcMwMoS'][0][0][1]
     EventSrcmod['flinnEngdahlRegionNo'] = F['FEregionNo'][0][0]
     EventSrcmod['flinnEngdahlRegion'] = F['FEregion'][0][0]
+
+    # Convert epicenter to UTM coordintes
+    # Note strange *lat, lon* ordering of arguments next line only
+    _, _, EventSrcmod['zoneNumber'], EventSrcmod['zoneLetter'] = utm.from_latlon(EventSrcmod['epicenterLatitude'], EventSrcmod['epicenterLongitude'])
+    EventSrcmod['projEpicenter'] = pyproj.Proj(proj='utm', zone=str(EventSrcmod['zoneNumber']) + EventSrcmod['zoneLetter'], ellps='WGS84')
+    EventSrcmod['epicenterXUtm'], EventSrcmod['epicenterYUtm'] = EventSrcmod['projEpicenter'](EventSrcmod['epicenterLongitude'], EventSrcmod['epicenterLatitude'])
 
     # Convert date string to datetime object
     EventSrcmod['datetime'] = datetime.datetime.strptime(EventSrcmod['date'], '%m/%d/%Y')
@@ -199,7 +219,24 @@ def readSrcmodFile(fileName):
                 EventSrcmod['x4'].append(km2m * (xTopCenter + xTopBottomOffset - xTopOffset))
                 EventSrcmod['y4'].append(km2m * (yTopCenter + yTopBottomOffset - yTopOffset))
                 EventSrcmod['z4'].append(km2m * (zTopCenter + zTopBottomOffset - zTopOffset))
-            
+
+                # Create UTM version of the same
+                xTopCenterUtm, yTopCenterUtm = EventSrcmod['projEpicenter'](EventSrcmod['patchLongitude'][-1], EventSrcmod['patchLatitude'][-1], inverse=False)
+                EventSrcmod['patchXUtm'] = xTopCenterUtm
+                EventSrcmod['patchYUtm'] = yTopCenterUtm
+                EventSrcmod['x1Utm'].append(xTopCenterUtm + km2m * xTopOffset)
+                EventSrcmod['y1Utm'].append(yTopCenterUtm + km2m * yTopOffset)
+                EventSrcmod['z1Utm'].append(km2m * (zTopCenter - zTopOffset)) # not sure this is right?!
+                EventSrcmod['x2Utm'].append(xTopCenterUtm - km2m * xTopOffset)
+                EventSrcmod['y2Utm'].append(yTopCenterUtm - km2m * yTopOffset)
+                EventSrcmod['z2Utm'].append(km2m * (zTopCenter - zTopOffset))
+                EventSrcmod['x3Utm'].append(xTopCenterUtm + km2m * (xTopBottomOffset + xTopOffset))
+                EventSrcmod['y3Utm'].append(yTopCenterUtm + km2m * (yTopBottomOffset + yTopOffset))
+                EventSrcmod['z3Utm'].append(km2m * (zTopCenter + zTopBottomOffset - zTopOffset))
+                EventSrcmod['x4Utm'].append(xTopCenterUtm + km2m * (xTopBottomOffset - xTopOffset))
+                EventSrcmod['y4Utm'].append(yTopCenterUtm + km2m * (yTopBottomOffset - yTopOffset))
+                EventSrcmod['z4Utm'].append(km2m * (zTopCenter + zTopBottomOffset - zTopOffset))
+             
                 # Extract patch dip, strike, width, and length
                 EventSrcmod['dip'].append(F['seg' + str(iPanel) + 'DipAn'])
                 EventSrcmod['strike'].append(F['seg' + str(iPanel) + 'AStke'])
@@ -246,7 +283,7 @@ def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
     return(cfs)
 
 
-def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame):
+def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame, useUtm):
     # Define the material parameter that Okada's Greens functions is sensitive too
     alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
 
@@ -263,12 +300,19 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
     StressTensor['syz'] = np.zeros(xVec.size)
     StressTensor['szz'] = np.zeros(xVec.size)
 
+    # Check if UTM coordinates should be used
+    if useUtm == True:
+        utmString = 'Utm'
+    else:
+        utmString = ''
+
+    # Loop over each patch and calculation elastic displacements and strains
     for iPatch in range(0, len(EventSrcmod['x1'])): # Loop over source patches
         print 'patch ' + str(iPatch+1) + ' of ' + str(len(EventSrcmod['x1']))
         for iObs in range(0, len(xVec)): # Loop over observation coordinates
             # Translate and (un)rotate observation coordinates
-            xTemp = xVec[iObs]-EventSrcmod['x1'][iPatch]
-            yTemp = yVec[iObs]-EventSrcmod['y1'][iPatch]
+            xTemp = xVec[iObs]-EventSrcmod['x1'+utmString][iPatch]
+            yTemp = yVec[iObs]-EventSrcmod['y1'+utmString][iPatch]
             rTemp = np.array([[math.cos(math.radians(-EventSrcmod['angle'][iPatch])), 
                               -math.sin(math.radians(-EventSrcmod['angle'][iPatch]))],
                               [math.sin(math.radians(-EventSrcmod['angle'][iPatch])),
@@ -307,8 +351,75 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
             StressTensor['syy'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSyy
             StressTensor['syz'][iObs] += 2*muLame*strainSyz
             StressTensor['szz'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSzz
-
     return(DisplacementVector, StressTensor)
+
+
+def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs):
+    # Clip CFS values for plotting purposes
+    cfsHighIdx1 = (Cfs['cfs']>Cfs['cfsUpperLimit']).nonzero()
+    cfsHighIdx2 = (Cfs['cfs']>0).nonzero()
+    cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
+    cfsLowIdx1 = (Cfs['cfs']<Cfs['cfsLowerLimit']).nonzero()
+    cfsLowIdx2 = (Cfs['cfs']<0).nonzero()
+    cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
+    Cfs['cfs'][cfsHighIdx] = Cfs['cfsUpperLimit']
+    Cfs['cfs'][cfsLowIdx] = Cfs['cfsLowerLimit']
+
+    # Generate figure showing fault geometry and CFS field
+    fig = plt.figure(facecolor='white')
+    ax = fig.gca()
+    cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
+    cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 0, linewidths=1.0, colors='w', origin='lower', hold='on')
+
+    # Draw a black line around the CFS field
+    xCircle = 100e3*np.cos(np.arange(0, 2*np.pi+0.01, 0.01))
+    yCircle = 100e3*np.sin(np.arange(0, 2*np.pi+0.01, 0.01))
+    ax.plot(xCircle, yCircle, color=[0.0, 0.0, 0.0], linewidth=1.0)
+
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+
+    # Plot scale bar
+    ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.text(-75e3, -110e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
+
+    # Plot orientation of reciever plane
+    ax.plot([75e3, 75e3 + 10e3*Cfs['nVecInPlane'][0]], [-100e3, -100e3 + 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.plot([75e3, 75e3 - 10e3*Cfs['nVecInPlane'][0]], [-100e3, -100e3 - 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.plot(75e3, -100e3, color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
+
+    # Standard decorations
+    plt.title(EventSrcmod['tag'])
+    plt.xlabel('x (m)')
+    plt.ylabel('y (m)')
+    plt.axis('equal')
+    plt.axis('off') # turning off axes labels...replaced with scale bar
+    cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
+                        orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
+    cbar.ax.set_xlabel('CFS (MPa)')
+    cbar.ax.tick_params(length=0)
+    ax.set_ylim([-110e3, 120e3])
+    ax.set_xlim([-110e3, 110e3])
+
+
+def diskObservationPoints(obsDepth, xOffset, yOffset):
+    # Observation coordinates on a circular grid
+    n_angles = 10
+    n_radii = 10
+    radii = np.linspace(0, 1, n_radii)
+    radii = 100e3 * np.sqrt(radii)
+    angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
+    angles = np.repeat(angles[..., np.newaxis], n_radii, axis=1)
+    angles[:, 1::2] += math.pi/n_angles
+    xVec = (radii*np.cos(angles)).flatten()
+    yVec = (radii*np.sin(angles)).flatten()
+    xVec = xVec + xOffset
+    yVec = yVec + yOffset
+    zVec = obsDepth*np.ones(xVec.size)
+    return(xVec, yVec, zVec)
 
 
 def main():
@@ -320,84 +431,27 @@ def main():
     muLame = 3e10 # Second Lame parameter (shear modulus, Pascals)
     coefficientOfFriction = 0.4 # Coefficient of friction
     obsDepth = -5e3; # depth of observation coordinates
-    nVecInPlane = [0, 1, 0]
-    nVecNormal = [1, 0, 0]
-    cfsUpperLimit = 1e5; # for visualziation purposes
-    cfsLowerLimit = -1e5; # for visualization purposes
-
-    # Observation coordinates on a circular grid
-    plotFigures = False
-    n_angles = 10
-    n_radii = 10
-    radii = np.linspace(0, 1, n_radii)
-    radii = 100e3 * np.sqrt(radii)
-    angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
-    angles = np.repeat(angles[..., np.newaxis], n_radii, axis=1)
-    angles[:, 1::2] += math.pi/n_angles
-    xVec = (radii*np.cos(angles)).flatten()
-    yVec = (radii*np.sin(angles)).flatten()
-    zVec = obsDepth*np.ones(xVec.size)
+    Cfs = dict()
+    Cfs['nVecInPlane'] = [0, 1, 0]
+    Cfs['nVecNormal'] = [1, 0, 0]
+    Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
+    Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
+    useUtm = True
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
 
+    # Generate observation coordinates on a regular grid around epicenter
+    obsX, obsY, obsZ = diskObservationPoints(obsDepth, EventSrcmod['epicenterXUtm'], EventSrcmod['epicenterYUtm'])
+
     # Calculate displacement vector and stress tensor at observation coordinates
-    DisplacementVector, StressTensor = calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame)
+    DisplacementVector, StressTensor = calcOkadaDisplacementStress(obsX, obsY, obsZ, EventSrcmod, lambdaLame, muLame, useUtm)
 
     # Resolve Coulomb failure stresses on reciever plane
-    cfs = calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction)
+    Cfs['cfs'] = calcCfs(StressTensor, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
 
-    # Clip CFS values for plotting purposes
-    cfsHighIdx1 = (cfs>cfsUpperLimit).nonzero()
-    cfsHighIdx2 = (cfs>0).nonzero()
-    cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
-    cfsLowIdx1 = (cfs<cfsLowerLimit).nonzero()
-    cfsLowIdx2 = (cfs<0).nonzero()
-    cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
-    cfs[cfsHighIdx] = cfsUpperLimit
-    cfs[cfsLowIdx] = cfsLowerLimit
-
-    # Generate figure showing fault geometry and CFS field
-    if plotFigures:
-        plt.close('all')
-        fig = plt.figure(facecolor='white')
-        ax = fig.gca()
-        cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
-        cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*cfs.flatten(), 0, linewidths=1.0, colors='w', origin='lower', hold='on')
-
-        # Draw a black line around the CFS field
-        xCircle = 100e3*np.cos(np.arange(0, 2*np.pi+0.01, 0.01))
-        yCircle = 100e3*np.sin(np.arange(0, 2*np.pi+0.01, 0.01))
-        ax.plot(xCircle, yCircle, color=[0.0, 0.0, 0.0], linewidth=1.0)
-
-        for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
-            ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x2'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y2'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-            ax.plot([EventSrcmod['x2'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y2'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-            ax.plot([EventSrcmod['x1'][iPatch], EventSrcmod['x3'][iPatch]], [EventSrcmod['y1'][iPatch], EventSrcmod['y3'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-            ax.plot([EventSrcmod['x3'][iPatch], EventSrcmod['x4'][iPatch]], [EventSrcmod['y3'][iPatch], EventSrcmod['y4'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
-
-        # Plot scale bar
-        ax.plot([-100e3, -50e3], [-100e3, -100e3], color=[0.0, 0.0, 0.0], linewidth=1)
-        ax.text(-75e3, -110e3, '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
-
-        # Plot orientation of reciever plane
-        ax.plot([75e3, 75e3 + 10e3*nVecInPlane[0]], [-100e3, -100e3 + 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
-        ax.plot([75e3, 75e3 - 10e3*nVecInPlane[0]], [-100e3, -100e3 - 10e3*nVecInPlane[1]], color=[0.0, 0.0, 0.0], linewidth=1)
-        ax.plot(75e3, -100e3, color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
-
-        # Standard decorations
-        plt.title(fileName)
-        plt.xlabel('x (m)')
-        plt.ylabel('y (m)')
-        plt.axis('equal')
-        plt.axis('off') # turning off axes labels...replaced with scale bar
-        cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
-                            orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
-        cbar.ax.set_xlabel('CFS (MPa)')
-        cbar.ax.tick_params(length=0)
-        ax.set_ylim([-110e3, 120e3])
-        ax.set_xlim([-110e3, 110e3])
-
+    # Plot CFS with SRCMOD event and ISC events...eventually
+    plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs)
 
     # Read in ISC data
     startYear = 1999
@@ -406,48 +460,28 @@ def main():
     captureDays = 10
     startDateTime = datetime.datetime(startYear, startMonth, startDay, 0, 0, 0)
     endDateTime = startDateTime + datetime.timedelta(days=captureDays) - datetime.timedelta(seconds=1)
-    Catalog = getIscEventCatalog(startDateTime, endDateTime)
+    Catalog = getIscEventCatalog(startDateTime, endDateTime) # Read ISC events
+    # Convert longitude and latitudes to local UTM coordinates
+    Catalog['xUtm'], Catalog['yUtm'] = EventSrcmod['projEpicenter'](Catalog['longitude'], Catalog['latitude'])
 
-    if plotFigures:
-        # Plot ISC locations
-        fig2 = plt.figure(facecolor='white')
-        plt.scatter(Catalog['longitude'], Catalog['latitude'], alpha=0.5)
-        plt.scatter(EventSrcmod['patchLongitude'], EventSrcmod['patchLatitude'], alpha=0.5, color='red')
-        #plt.show()
-
-        # m = Basemap(llcrnrlon=0,llcrnrlat=-80,urcrnrlon=360,urcrnrlat=80,projection='mill')
-        # m.drawcoastlines()
-        # m.drawcountries()
-        # parallels = np.arange(-90, 90, 30) # draw parallels.
-        # m.drawparallels(parallels,labels=[1,0,0,0],fontsize=10)
-        # meridians = np.arange(0.0, 360.0, 30) # draw meridians
-        # m.drawmeridians(meridians,labels=[0,0,0,1],fontsize=10)
-        # x, y = m(catalog['longitude'], catalog['latitude'])
-        # m.scatter(x, y, 3, marker='o', color='r')
-        # plt.show()
-
-        #plt.scatter(catalog['datetime'], catalog['magnitude'], alpha=0.5)
-        #plt.show()
-
-
-    # Find UTM zone of current SRCMOD event
-    print ' '
-    # Note lat, lon ordering of arguments in this line only
-    _, _, zoneNumber, zoneLetter = utm.from_latlon(EventSrcmod['epicenterLatitude'], EventSrcmod['epicenterLongitude'])
-    projEpicenter = pyproj.Proj(proj='utm', zone=str(zoneNumber) + zoneLetter, ellps='WGS84')
-    epicenterXUtm, epicenterYUtm = projEpicenter(EventSrcmod['epicenterLongitude'], EventSrcmod['epicenterLatitude'])
-    xUtm, yUtm = projEpicenter(Catalog['longitude'], Catalog['latitude'])
-
-
-    patchXUtm, patchYUtm = projEpicenter(EventSrcmod['patchLongitude'], EventSrcmod['patchLatitude'], inverse=False)
     fig3 = plt.figure(facecolor='white')
     ax = fig3.gca()
-    ax.plot(patchXUtm, patchYUtm, marker='x', color='blue', linestyle='None')
-    ax.plot(epicenterXUtm, epicenterYUtm, marker='x', color='red', linestyle='None')
-    ax.plot(xUtm, yUtm, marker='.', color='green', linestyle='None')
+    cs = plt.tricontourf(obsX.flatten(), obsY.flatten(), 1e-6*Cfs['cfs'].flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
+    cs2 = plt.tricontour(obsX.flatten(), obsY.flatten(), 1e-6*Cfs['cfs'].flatten(), 0, linewidths=1.0, colors='w', origin='lower', hold='on')
+
+    ax.plot(EventSrcmod['patchXUtm'], EventSrcmod['patchYUtm'], marker='x', color='blue', linestyle='None')
+    ax.plot(EventSrcmod['epicenterXUtm'], EventSrcmod['epicenterYUtm'], marker='x', color='red', linestyle='None')
+    ax.plot(Catalog['xUtm'], Catalog['yUtm'], marker='.', color='green', linestyle='None')
     plt.axis('equal')
-    ax.set_xlim([epicenterXUtm-100e3, epicenterXUtm+100e3])
-    ax.set_ylim([epicenterYUtm-100e3, epicenterYUtm+100e3])
+    ax.set_xlim([EventSrcmod['epicenterXUtm']-100e3, EventSrcmod['epicenterXUtm']+100e3])
+    ax.set_ylim([EventSrcmod['epicenterYUtm']-100e3, EventSrcmod['epicenterYUtm']+100e3])
+
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+        ax.plot([EventSrcmod['x1Utm'][iPatch], EventSrcmod['x2Utm'][iPatch]], [EventSrcmod['y1Utm'][iPatch], EventSrcmod['y2Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x2Utm'][iPatch], EventSrcmod['x4Utm'][iPatch]], [EventSrcmod['y2Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x1Utm'][iPatch], EventSrcmod['x3Utm'][iPatch]], [EventSrcmod['y1Utm'][iPatch], EventSrcmod['y3Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x3Utm'][iPatch], EventSrcmod['x4Utm'][iPatch]], [EventSrcmod['y3Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+
     plt.show()
 
     # Provide keyboard control to interact with variables
