@@ -448,6 +448,28 @@ def cfsVectorsFromAzimuth(faultAzimuth):
     return(nVecInPlane, nVecNormal)
 
 
+def getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod):
+    # Convert longitude and latitudes to local UTM coordinates
+    Catalog['xUtm'], Catalog['yUtm'] = EventSrcmod['projEpicenter'](Catalog['longitude'], Catalog['latitude'])
+
+    # Determine distanance from ISC events to SRCMOD event and delete those more than NNN km away
+    deleteIdx = []
+    Catalog['distanceToEpicenter'] = []
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        srcmodIscDistance = np.sqrt((Catalog['xUtm'][iIsc] - EventSrcmod['epicenterXUtm'])**2 + 
+                                    (Catalog['yUtm'][iIsc] - EventSrcmod['epicenterYUtm'])**2)
+        Catalog['distanceToEpicenter'].append(srcmodIscDistance)
+        if (srcmodIscDistance > nearFieldDistance):
+            deleteIdx.append(iIsc)
+
+    # Remove all ISC earthquakes that are not in field of interest from lists in dict Catalog
+    deleteIdx = sorted(deleteIdx, reverse=True)
+    for iKey in Catalog.keys():
+        for iDeleteIdx in range(0, len(deleteIdx)):
+            del Catalog[iKey][deleteIdx[iDeleteIdx]]
+    return(Catalog)
+
+
 def main():
     # Name of Srcmod file to read
     fileName = 's1999HECTOR01SALI'
@@ -464,6 +486,8 @@ def main():
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
     catalogType = 'REVIEWED' # The other option is 'COMPREHENSIVE' which contains more earthquakes but, perhaps, less precise locations
+    captureDays = 10 # Consider ISC earthquakes for this many days after day of main shock
+    nearFieldDistance = 100e3 # Keep only those ISC earthquakes withing this disance of the SRCMOD epicenter
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
@@ -477,32 +501,12 @@ def main():
     # Resolve Coulomb failure stresses on reciever plane
     Cfs['cfs'] = calcCfs(StressTensor, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
 
-    # Read in ISC data
-    startYear = 1999
-    startMonth = 10
-    startDay = 16
-    captureDays = 10
-    startDateTime = datetime.datetime(startYear, startMonth, startDay, 0, 0, 0)
+    # Read in ISC data for capture days after the date of the SRCMOD event
+    startDateTime = EventSrcmod['datetime'] + datetime.timedelta(days=1) # Start day after event
     endDateTime = startDateTime + datetime.timedelta(days=captureDays) - datetime.timedelta(seconds=1)
     Catalog = getIscEventCatalog(startDateTime, endDateTime, catalogType) # Read ISC events
-    # Convert longitude and latitudes to local UTM coordinates
-    Catalog['xUtm'], Catalog['yUtm'] = EventSrcmod['projEpicenter'](Catalog['longitude'], Catalog['latitude'])
+    Catalog = getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod)
 
-    # Determine distanance from ISC events to SRCMOD event and delete those more than NNN km away
-    deleteIdx = []
-    Catalog['distanceToEpicenter'] = []
-    for iIsc in range(0, len(Catalog['xUtm'])):
-        srcmodIscDistance = np.sqrt((Catalog['xUtm'][iIsc] - EventSrcmod['epicenterXUtm'])**2 + 
-                                    (Catalog['yUtm'][iIsc] - EventSrcmod['epicenterYUtm'])**2)
-        Catalog['distanceToEpicenter'].append(srcmodIscDistance)
-        if (srcmodIscDistance > 100e3):
-            deleteIdx.append(iIsc)
-
-    # Remove all ISC earthquakes that are not in field of interest from lists in dict Catalog
-    deleteIdx = sorted(deleteIdx, reverse=True)
-    for iKey in Catalog.keys():
-        for iDeleteIdx in range(0, len(deleteIdx)):
-            del Catalog[iKey][deleteIdx[iDeleteIdx]]
 
 #            calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
 #                                        np.array([Catalog['yUtm'][iIsc]]), 
