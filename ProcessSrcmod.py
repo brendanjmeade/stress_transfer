@@ -25,11 +25,13 @@ def isNumber(s):
 
 
 # Function to either load or request and load ISC event catalog between two different dates
-def getIscEventCatalog(startDateTime, endDateTime):
+def getIscEventCatalog(startDateTime, endDateTime, catalogType):
+    # catalogType must be either 'COMPREHENSIVE' or 'REVIEWED'
+
     print 'ISC earthquake catalog data from ' + \
           'start day: ' + startDateTime.strftime('%d/%m/%Y %H:%M:%S') + ' to '\
           'end day', endDateTime.strftime('%d/%m/%Y %H:%M:%S')
-    outputFileNameCsvDated = 'iscsearch_complete_' + \
+    outputFileNameCsvDated = 'iscsearch_' + catalogType + '_' + \
                              startDateTime.strftime('%d_%m_%Y_%H_%M_%S') + \
                              endDateTime.strftime('_%d_%m_%Y_%H_%M_%S') + '.csv'
 
@@ -39,7 +41,9 @@ def getIscEventCatalog(startDateTime, endDateTime):
 
     else:
         print '    File: ' + outputFileNameCsvDated + ' does not exist locally. Requesting data from ISC server.'
-        composedUrl = 'http://colossus.iris.washington.edu/cgi-bin/web-db-v4?request=COMPREHENSIVE&out_format=CATCSV&bot_lat=&top_lat=&left_lon=&right_lon=&ctr_lat=&ctr_lon=&radius=&max_dist_units=deg&searchshape=GLOBAL&srn=&grn=' + \
+        composedUrl = 'http://colossus.iris.washington.edu/cgi-bin/web-db-v4?request=' + \
+                      catalogType + \
+                      '&out_format=CATCSV&bot_lat=&top_lat=&left_lon=&right_lon=&ctr_lat=&ctr_lon=&radius=&max_dist_units=deg&searchshape=GLOBAL&srn=&grn=' + \
                       '&start_year=' + startDateTime.strftime('%Y') + \
                       '&start_month=' + startDateTime.strftime('%m') + \
                       '&start_day=' + startDateTime.strftime('%d') + \
@@ -54,7 +58,11 @@ def getIscEventCatalog(startDateTime, endDateTime):
 
     # Read in downloaded file  
     lines = [line.strip() for line in open(outputFileNameCsvDated)]
-    startLineIdx = 29 # Start processing at this line to avoid header
+    if catalogType == 'COMPREHENSIVE':
+        startLineIdx = 29 # Start processing at this line to avoid header
+    elif catalogType == 'REVIEWED':
+        startLineIdx = 34 # Start processing at this line to avoid header
+
     endLineIdx = np.shape(lines)[0]-5 # Stop processing at this line to avoid footer
 
     # Dictionary for storing catalog of events
@@ -394,9 +402,8 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
 
     # Plot ISC earthquake locations if they are close enough to the epicenter
     for iIsc in range(0, len(Catalog['xUtm'])):
-        if Catalog['isNear'][iIsc] == True:
-            ax.plot(Catalog['xUtm'][iIsc], Catalog['yUtm'][iIsc], marker='o', color='white', linestyle='none',
-                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        ax.plot(Catalog['xUtm'][iIsc], Catalog['yUtm'][iIsc], marker='o', color='white', linestyle='none',
+                markerfacecoloralt='gray', markersize=5, alpha=1.0)
 
     # Standard decorations
     plt.title(EventSrcmod['tag'])
@@ -456,6 +463,7 @@ def main():
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
+    catalogType = 'REVIEWED' # The other option is 'COMPREHENSIVE' which contains more earthquakes but, perhaps, less precise locations
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
@@ -476,27 +484,32 @@ def main():
     captureDays = 10
     startDateTime = datetime.datetime(startYear, startMonth, startDay, 0, 0, 0)
     endDateTime = startDateTime + datetime.timedelta(days=captureDays) - datetime.timedelta(seconds=1)
-    Catalog = getIscEventCatalog(startDateTime, endDateTime) # Read ISC events
+    Catalog = getIscEventCatalog(startDateTime, endDateTime, catalogType) # Read ISC events
     # Convert longitude and latitudes to local UTM coordinates
     Catalog['xUtm'], Catalog['yUtm'] = EventSrcmod['projEpicenter'](Catalog['longitude'], Catalog['latitude'])
 
     # Determine distanance from ISC events to SRCMOD event and delete those more than NNN km away
-    Catalog['isNear'] = []
+    deleteIdx = []
+    Catalog['distanceToEpicenter'] = []
     for iIsc in range(0, len(Catalog['xUtm'])):
         srcmodIscDistance = np.sqrt((Catalog['xUtm'][iIsc] - EventSrcmod['epicenterXUtm'])**2 + 
                                     (Catalog['yUtm'][iIsc] - EventSrcmod['epicenterYUtm'])**2)
-        if (srcmodIscDistance < 100e3):
-            Catalog['isNear'].append(True)
-            calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
-                                        np.array([Catalog['yUtm'][iIsc]]), 
-                                        np.array([Catalog['depth'][iIsc]]), 
-                                        EventSrcmod, lambdaLame, muLame, useUtm)
-        else:
-            Catalog['isNear'].append(False)
+        Catalog['distanceToEpicenter'].append(srcmodIscDistance)
+        if (srcmodIscDistance > 100e3):
+            deleteIdx.append(iIsc)
 
-    # Calculate CFS at ISC locations
+    # Remove all ISC earthquakes that are not in field of interest from lists in dict Catalog
+    deleteIdx = sorted(deleteIdx, reverse=True)
+    for iKey in Catalog.keys():
+        for iDeleteIdx in range(0, len(deleteIdx)):
+            del Catalog[iKey][deleteIdx[iDeleteIdx]]
 
+#            calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
+#                                        np.array([Catalog['yUtm'][iIsc]]), 
+#                                        np.array([Catalog['depth'][iIsc]]), 
+#                                        EventSrcmod, lambdaLame, muLame, useUtm)
 
+    
     # Plot CFS with SRCMOD event and ISC events
     plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog)
     plt.show()
@@ -504,5 +517,5 @@ def main():
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
 
-if __name__ == "__main__":
+if __name__ == '__main__':
    main()
