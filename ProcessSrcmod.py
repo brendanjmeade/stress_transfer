@@ -14,7 +14,6 @@ from matplotlib.pyplot import show
 import mpl_toolkits.basemap.pyproj as pyproj
 
 
-
 # Function to check to see if a string can be converted into a float.  Useful for error checking.
 def isNumber(s):
     try:
@@ -97,7 +96,7 @@ def getIscEventCatalog(startDateTime, endDateTime, catalogType):
             catalog['sec'].append(lines[i][35 + firstCommaOffset:37 + firstCommaOffset])
             catalog['latitude'].append(float(lines[i][42 + firstCommaOffset:49 + firstCommaOffset]))
             catalog['longitude'].append(float(lines[i][50 + firstCommaOffset:59 + firstCommaOffset]))
-            catalog['depth'].append(float(lines[i][61 + firstCommaOffset:65 + firstCommaOffset]))
+            catalog['depth'].append(-float(lines[i][61 + firstCommaOffset:65 + firstCommaOffset])) # negative sign here to make depth ready for Okada conventions
             catalog['magnitude'].append(float(lines[i][91 + firstCommaOffset:94 + firstCommaOffset]))
             catalog['datetime'].append(datetime.datetime.strptime(catalog['yr'][-1] + ' ' + catalog['mon'][-1] + ' ' + catalog['day'][-1] + ' ' + 
                                                                   catalog['hr'][-1] + ' ' + catalog['min'][-1] + ' ' + catalog['sec'][-1], 
@@ -422,8 +421,8 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
 def diskObservationPoints(obsDepth, xOffset, yOffset):
     # Observation coordinates on a circular grid
     # This was taken from the internet (stackoverflow???)
-    n_angles = 10
-    n_radii = 10
+    n_angles = 100
+    n_radii = 100
     radii = np.linspace(0, 1, n_radii)
     radii = 100e3 * np.sqrt(radii)
     angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
@@ -477,16 +476,16 @@ def main():
     # Parameters for CFS calculation and visualization
     lambdaLame = 3e10 # First Lame parameter (Pascals)
     muLame = 3e10 # Second Lame parameter (shear modulus, Pascals)
-    coefficientOfFriction = 0.4 # Coefficient of friction
-    obsDepth = -5e3; # depth of observation coordinates
+    coefficientOfFriction = 0.85 # Coefficient of friction
+    obsDepth = -5e3; # depth of observation coordinates just for disc visualization
     Cfs = dict()
-    Cfs['faultAzimuth'] = 0;
+    Cfs['faultAzimuth'] = -35; # Degrees from NNN?
     Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'])
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
     catalogType = 'REVIEWED' # The other option is 'COMPREHENSIVE' which contains more earthquakes but, perhaps, less precise locations
-    captureDays = 10 # Consider ISC earthquakes for this many days after day of main shock
+    captureDays = 30 # Consider ISC earthquakes for this many days after day of main shock
     nearFieldDistance = 100e3 # Keep only those ISC earthquakes withing this disance of the SRCMOD epicenter
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
@@ -507,16 +506,63 @@ def main():
     Catalog = getIscEventCatalog(startDateTime, endDateTime, catalogType) # Read ISC events
     Catalog = getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod)
 
-
-#            calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
-#                                        np.array([Catalog['yUtm'][iIsc]]), 
-#                                        np.array([Catalog['depth'][iIsc]]), 
-#                                        EventSrcmod, lambdaLame, muLame, useUtm)
-
+    # Calculate Coulomb failure stress at ISC event locations
+    Catalog['cfs'] = []
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        DisplacementVectorIsc, StressTensorIsc = calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
+                                                                             np.array([Catalog['yUtm'][iIsc]]), 
+                                                                             np.array([Catalog['depth'][iIsc]]), 
+                                                                             EventSrcmod, lambdaLame, muLame, useUtm)
+        Catalog['cfs'].append(calcCfs(StressTensorIsc, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)[0])
     
     # Plot CFS with SRCMOD event and ISC events
     plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog)
+
+    fig = plt.figure(facecolor='white')
+    ax = fig.gca()
+    iscCfsPositives = 0
+    iscCfsNegatives = 0
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            iscCfsPositives = iscCfsPositives + 1
+            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            iscCfsNegatives = iscCfsNegatives + 1
+            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    print iscCfsPositives, iscCfsNegatives
+       
+    ax.set_xlim([3.0, 5.0])
+    ax.set_ylim([-0.5e8, 0.5e8])
+    plt.xlabel('log(distance(m))')
+    plt.ylabel('\Delta CFS')
+
+
+    fig = plt.figure(facecolor='white')
+    ax = fig.gca()
+    iscCfsPositives = 0
+    iscCfsNegatives = 0
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            iscCfsPositives = iscCfsPositives + 1
+            ax.plot(Catalog['datetime'][iIsc], Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            iscCfsNegatives = iscCfsNegatives + 1
+            ax.plot(Catalog['datetime'][iIsc], Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    print iscCfsPositives, iscCfsNegatives
+       
+    #ax.set_xlim([3.0, 5.0])
+    ax.set_ylim([-0.5e8, 0.5e8])
+    plt.xlabel('time')
+    plt.ylabel('\Delta CFS')
+
+
+
     plt.show()
+    print iscCfsPositives, iscCfsNegatives
 
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
