@@ -39,21 +39,40 @@ def getIscEventCatalog(startDateTime, endDateTime, catalogType):
         print '    File: ' + outputFileNameCsvDated + ' already exists locally. Using local file.'
 
     else:
-        print '    File: ' + outputFileNameCsvDated + ' does not exist locally. Requesting data from ISC server.'
-        composedUrl = 'http://colossus.iris.washington.edu/cgi-bin/web-db-v4?request=' + \
-                      catalogType + \
-                      '&out_format=CATCSV&bot_lat=&top_lat=&left_lon=&right_lon=&ctr_lat=&ctr_lon=&radius=&max_dist_units=deg&searchshape=GLOBAL&srn=&grn=' + \
-                      '&start_year=' + startDateTime.strftime('%Y') + \
-                      '&start_month=' + startDateTime.strftime('%m') + \
-                      '&start_day=' + startDateTime.strftime('%d') + \
-                      '&start_time=' + startDateTime.strftime('%H') + '%3A' + startDateTime.strftime('%M') + '%3A' +  startDateTime.strftime('%S') + \
-                      '&end_year=' + endDateTime.strftime('%Y') + \
-                      '&end_month=' + endDateTime.strftime('%m') + \
-                      '&end_day=' + endDateTime.strftime('%d') + \
-                      '&end_time=' + endDateTime.strftime('%H') + '%3A' + endDateTime.strftime('%M') + '%3A' +  endDateTime.strftime('%S') + \
-                      '&min_dep=&max_dep=&min_mag=&max_mag=&null_mag=on&req_mag_type=Any&req_mag_agcy=Any&include_links=off'
-        urllib.urlretrieve(composedUrl, outputFileNameCsvDated)
-        print '    File: ' + outputFileNameCsvDated + ' generated from ISC server request'
+        if catalogType == 'EHB':
+            print '    File: ' + outputFileNameCsvDated + ' does not exist locally. Requesting data from ISC server.'
+            composedUrl = 'http://colossus.iris.washington.edu/cgi-bin/web-db-v4?request=' + \
+                          'COLLECTED&req_agcy=EHB'+ \
+                          '&out_format=CATCSV&bot_lat=&top_lat=&left_lon=&right_lon=&ctr_lat=&ctr_lon=&radius=&max_dist_units=deg&searchshape=GLOBAL&srn=&grn=' + \
+                          '&start_year=' + startDateTime.strftime('%Y') + \
+                          '&start_month=' + startDateTime.strftime('%m') + \
+                          '&start_day=' + startDateTime.strftime('%d') + \
+                          '&start_time=' + startDateTime.strftime('%H') + '%3A' + startDateTime.strftime('%M') + '%3A' +  startDateTime.strftime('%S') + \
+                          '&end_year=' + endDateTime.strftime('%Y') + \
+                          '&end_month=' + endDateTime.strftime('%m') + \
+                          '&end_day=' + endDateTime.strftime('%d') + \
+                          '&end_time=' + endDateTime.strftime('%H') + '%3A' + endDateTime.strftime('%M') + '%3A' +  endDateTime.strftime('%S') + \
+                          '&min_dep=&max_dep=&min_mag=&max_mag=&null_mag=on&req_mag_type=Any&req_mag_agcy=Any&include_links=off' + \
+                          '&table_owner=ehb'
+            urllib.urlretrieve(composedUrl, outputFileNameCsvDated)
+            print '    File: ' + outputFileNameCsvDated + ' generated from ISC server request'
+
+        else:
+            print '    File: ' + outputFileNameCsvDated + ' does not exist locally. Requesting data from ISC server.'
+            composedUrl = 'http://colossus.iris.washington.edu/cgi-bin/web-db-v4?request=' + \
+                          catalogType + \
+                          '&out_format=CATCSV&bot_lat=&top_lat=&left_lon=&right_lon=&ctr_lat=&ctr_lon=&radius=&max_dist_units=deg&searchshape=GLOBAL&srn=&grn=' + \
+                          '&start_year=' + startDateTime.strftime('%Y') + \
+                          '&start_month=' + startDateTime.strftime('%m') + \
+                          '&start_day=' + startDateTime.strftime('%d') + \
+                          '&start_time=' + startDateTime.strftime('%H') + '%3A' + startDateTime.strftime('%M') + '%3A' +  startDateTime.strftime('%S') + \
+                          '&end_year=' + endDateTime.strftime('%Y') + \
+                          '&end_month=' + endDateTime.strftime('%m') + \
+                          '&end_day=' + endDateTime.strftime('%d') + \
+                          '&end_time=' + endDateTime.strftime('%H') + '%3A' + endDateTime.strftime('%M') + '%3A' +  endDateTime.strftime('%S') + \
+                          '&min_dep=&max_dep=&min_mag=&max_mag=&null_mag=on&req_mag_type=Any&req_mag_agcy=Any&include_links=off'
+            urllib.urlretrieve(composedUrl, outputFileNameCsvDated)
+            print '    File: ' + outputFileNameCsvDated + ' generated from ISC server request'
 
     # Read in downloaded file  
     lines = [line.strip() for line in open(outputFileNameCsvDated)]
@@ -61,7 +80,8 @@ def getIscEventCatalog(startDateTime, endDateTime, catalogType):
         startLineIdx = 29 # Start processing at this line to avoid header
     elif catalogType == 'REVIEWED':
         startLineIdx = 34 # Start processing at this line to avoid header
-
+    elif catalogType == 'EHB':
+        startLineIdx = 26 # Start processing at this line to avoid header
     endLineIdx = np.shape(lines)[0]-5 # Stop processing at this line to avoid footer
 
     # Dictionary for storing catalog of events
@@ -373,7 +393,8 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
     Cfs['cfs'][cfsLowIdx] = Cfs['cfsLowerLimit']
 
     # Generate figure showing fault geometry and CFS field
-    fig = plt.figure(facecolor='white')
+    fig = plt.figure(facecolor='white', figsize=(10, 6), dpi=100)
+    plt.subplot(1, 2, 1)
     ax = fig.gca()
     cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
     cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 0, linewidths=1.0, colors='k', origin='lower', hold='on')
@@ -412,10 +433,62 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
     plt.axis('off') # turning off axes labels...replaced with scale bar
     cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
                         orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
-    cbar.ax.set_xlabel('CFS (MPa)')
+    cbar.ax.set_xlabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
     cbar.ax.tick_params(length=0)
     ax.set_xlim([-110e3 + EventSrcmod['epicenterXUtm'], 110e3 + EventSrcmod['epicenterXUtm']])
     ax.set_ylim([-110e3 + EventSrcmod['epicenterYUtm'], 120e3 + EventSrcmod['epicenterYUtm']])
+
+    # Plot CFS as a function of distance from SRCMOD epicenter
+    plt.subplot(3, 2, 2)
+    ax = fig.gca()
+    ax.plot([3.0, 5.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
+    iscCfsPositives = 0
+    iscCfsNegatives = 0
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            iscCfsPositives = iscCfsPositives + 1
+            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), 1e-6*Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            iscCfsNegatives = iscCfsNegatives + 1
+            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), 1e-6*Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    ax.set_xlim([3.0, 5.0])
+    ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$\log_{10}\,d \, \mathrm{(m)}$')
+    plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+
+    # CFS as a function of time
+    plt.subplot(3, 2, 4)
+    ax = fig.gca()
+    ax.plot([0.0, 30.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            ax.plot((Catalog['datetime'][iIsc]-EventSrcmod['datetime']).days, 1e-6*Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            ax.plot((Catalog['datetime'][iIsc]-EventSrcmod['datetime']).days, 1e-6*Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$t \, \mathrm{(days)}$')
+    plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+
+    # CFS as a function of magnitude
+    plt.subplot(3, 2, 6)
+    ax = fig.gca()
+    ax.plot([3.0, 7.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            ax.plot(Catalog['magnitude'][iIsc], 1e-6*Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            ax.plot(Catalog['magnitude'][iIsc], 1e-6*Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    ax.set_xlim([3, 7])
+    ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$\mathrm{M_W}$')
+    plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.5)
 
 
 def diskObservationPoints(obsDepth, xOffset, yOffset):
@@ -484,7 +557,10 @@ def main():
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
-    catalogType = 'REVIEWED' # The other option is 'COMPREHENSIVE' which contains more earthquakes but, perhaps, less precise locations
+    catalogType = 'REVIEWED' # Options are:
+                             # 'COMPREHENSIVE': most earthquakes. Not human reviewed
+                             # 'REVIEWED': slightly fewer earthquakes. Some human quality control
+                             # 'EHB': many fewer earthquakes. Human quality control and precise relocations
     captureDays = 30 # Consider ISC earthquakes for this many days after day of main shock
     nearFieldDistance = 100e3 # Keep only those ISC earthquakes withing this disance of the SRCMOD epicenter
 
@@ -517,52 +593,9 @@ def main():
     
     # Plot CFS with SRCMOD event and ISC events
     plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog)
-
-    fig = plt.figure(facecolor='white')
-    ax = fig.gca()
-    iscCfsPositives = 0
-    iscCfsNegatives = 0
-    for iIsc in range(0, len(Catalog['xUtm'])):
-        if (Catalog['cfs'][iIsc] > 0):
-            iscCfsPositives = iscCfsPositives + 1
-            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
-                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
-        else:
-            iscCfsNegatives = iscCfsNegatives + 1
-            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
-                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
-    print iscCfsPositives, iscCfsNegatives
-       
-    ax.set_xlim([3.0, 5.0])
-    ax.set_ylim([-0.5e8, 0.5e8])
-    plt.xlabel('log(distance(m))')
-    plt.ylabel('\Delta CFS')
-
-
-    fig = plt.figure(facecolor='white')
-    ax = fig.gca()
-    iscCfsPositives = 0
-    iscCfsNegatives = 0
-    for iIsc in range(0, len(Catalog['xUtm'])):
-        if (Catalog['cfs'][iIsc] > 0):
-            iscCfsPositives = iscCfsPositives + 1
-            ax.plot(Catalog['datetime'][iIsc], Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
-                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
-        else:
-            iscCfsNegatives = iscCfsNegatives + 1
-            ax.plot(Catalog['datetime'][iIsc], Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
-                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
-    print iscCfsPositives, iscCfsNegatives
-       
-    #ax.set_xlim([3.0, 5.0])
-    ax.set_ylim([-0.5e8, 0.5e8])
-    plt.xlabel('time')
-    plt.ylabel('\Delta CFS')
-
-
-
     plt.show()
-    print iscCfsPositives, iscCfsNegatives
+
+#    print iscCfsPositives, iscCfsNegatives
 
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
