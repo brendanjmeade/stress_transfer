@@ -1,3 +1,4 @@
+from __future__ import division
 import math
 import code
 import datetime
@@ -6,13 +7,10 @@ import utm
 import os.path
 import numpy as np
 import matplotlib.pyplot as plt
+import mpl_toolkits.basemap.pyproj as pyproj
 from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
 from matplotlib import cm
-from mpl_toolkits.basemap import Basemap
-from matplotlib.pyplot import show
-import mpl_toolkits.basemap.pyproj as pyproj
-
 
 # Function to check to see if a string can be converted into a float.  Useful for error checking.
 def isNumber(s):
@@ -265,13 +263,17 @@ def readSrcmodFile(fileName):
                 EventSrcmod['z4Utm'].append(km2m * (zTopCenter + zTopBottomOffset - zTopOffset))
              
                 # Extract patch dip, strike, width, and length
-                EventSrcmod['dip'].append(F['seg' + str(iPanel) + 'DipAn'])
-                EventSrcmod['strike'].append(F['seg' + str(iPanel) + 'AStke'])
+                EventSrcmod['dip'].append(F['seg' + str(iPanel) + 'DipAn'][0][0][0])
+                EventSrcmod['strike'].append(F['seg' + str(iPanel) + 'AStke'][0][0][0])
+                EventSrcmod['dipMean'] = np.mean(np.array(EventSrcmod['dip'])) # not width weighted
+                EventSrcmod['strikeMean'] = np.mean(np.array(EventSrcmod['strike'])) # not length weighted
+                EventSrcmod['dipMean'] = np.mean(np.array(EventSrcmod['dip'])) # not width weighted
+                EventSrcmod['strikeMean'] = np.mean(np.array(EventSrcmod['strike'])) # not length weighted
                 EventSrcmod['rake'].append(F['seg' + str(iPanel) + 'RAKE'][0][iDownDip][iAlongStrike])
                 EventSrcmod['angle'].append(angle)
                 EventSrcmod['width'].append(km2m * W)
                 EventSrcmod['length'].append(km2m * L)
-            
+
                 # Extract fault slip
                 EventSrcmod['slip'].append(cm2m*(F['seg' + str(iPanel) + 'SLIP'][0][iDownDip][iAlongStrike]))
                 rTemp = np.array([[math.cos(math.radians(EventSrcmod['rake'][-1])), 
@@ -314,11 +316,18 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
     # Define the material parameter that Okada's Greens functions is sensitive too
     alpha = (lambdaLame+muLame) / (lambdaLame+2*muLame)
 
-    # Calculate elastic displacement and stress fields associated with all fault patches
+    # Calculate elastic displacement, strain, and stress fields associated with all fault patches
     DisplacementVector = dict()
     DisplacementVector['ux'] = np.zeros(xVec.size)
     DisplacementVector['uy'] = np.zeros(xVec.size)
     DisplacementVector['uz'] = np.zeros(xVec.size)
+    StrainTensor = dict()
+    StrainTensor['sxx'] = np.zeros(xVec.size)
+    StrainTensor['sxy'] = np.zeros(xVec.size)
+    StrainTensor['sxz'] = np.zeros(xVec.size)
+    StrainTensor['syy'] = np.zeros(xVec.size)
+    StrainTensor['syz'] = np.zeros(xVec.size)
+    StrainTensor['szz'] = np.zeros(xVec.size)
     StressTensor = dict()
     StressTensor['sxx'] = np.zeros(xVec.size)
     StressTensor['sxy'] = np.zeros(xVec.size)
@@ -372,13 +381,19 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
             strainSyy = uGrad[1, 1]
             strainSyz = 0.5*(uGrad[1, 2] + uGrad[2, 1])
             strainSzz = uGrad[2, 2]
+            StrainTensor['sxx'][iObs] += strainSxx
+            StrainTensor['sxy'][iObs] += strainSxy
+            StrainTensor['sxz'][iObs] += strainSxz
+            StrainTensor['syy'][iObs] += strainSyy
+            StrainTensor['syz'][iObs] += strainSyz
+            StrainTensor['szz'][iObs] += strainSzz
             StressTensor['sxx'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSxx
             StressTensor['sxy'][iObs] += 2*muLame*strainSxy
             StressTensor['sxz'][iObs] += 2*muLame*strainSxz
             StressTensor['syy'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSyy
             StressTensor['syz'][iObs] += 2*muLame*strainSyz
             StressTensor['szz'][iObs] += lambdaLame*(strainSxx+strainSyy+strainSzz) + 2*muLame*strainSzz
-    return(DisplacementVector, StressTensor)
+    return(DisplacementVector, StrainTensor, StressTensor)
 
 
 def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
@@ -457,6 +472,7 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
     ax.set_ylim([-0.5e2, 0.5e2])
     plt.xlabel(r'$\log_{10}\,d \, \mathrm{(m)}$')
     plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    plt.title(r'$N(\Delta\mathrm{CFS}>0) = $' + str(iscCfsPositives) + ', $N(\Delta\mathrm{CFS}<0) = $' + str(iscCfsNegatives))
 
     # CFS as a function of time
     plt.subplot(3, 2, 4)
@@ -494,8 +510,8 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
 def diskObservationPoints(obsDepth, xOffset, yOffset):
     # Observation coordinates on a circular grid
     # This was taken from the internet (stackoverflow???)
-    n_angles = 100
-    n_radii = 100
+    n_angles = 10
+    n_radii = 10
     radii = np.linspace(0, 1, n_radii)
     radii = 100e3 * np.sqrt(radii)
     angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
@@ -542,6 +558,54 @@ def getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod):
     return(Catalog)
 
 
+def calcMaximumShear(tensor):
+    # Calculate maximum shear (stress or strain) in three-dimensions.
+    # Not yet visualized or checked.
+    maximumShear = []
+    for iObs in range(0, len(tensor['sxx'])): # Compute invariants at each observation coordinate
+        matrix = np.array([[tensor['sxx'][iObs], tensor['sxy'][iObs], tensor['sxz'][iObs]],
+                           [tensor['sxy'][iObs], tensor['syy'][iObs], tensor['syz'][iObs]],
+                           [tensor['sxz'][iObs], tensor['syz'][iObs], tensor['szz'][iObs]]])
+        # Compute principal strains/stresses using eigenvalues
+        eigenValues = list(np.linalg.eigvalsh(matrix))
+        maximumShear.append((max(eigenValues) - min(eigenValues)) / 2.0) # maximum shear stress
+    return(maximumShear)
+
+
+def calcTensorInvariants(tensor):
+    # Calculate invariants of tensor (stress or strain) in three-dimensions.
+    # Not yet visualized or checked.
+    invariant1 = []
+    invariant2 = []
+    invariant3 = []
+    for iObs in range(0, len(tensor['sxx'])): # Compute invariants at each observation coordinate
+        invariant1.append(tensor['sxx'][iObs] + tensor['syy'][iObs] + tensor['szz'][iObs])
+        invariant2.append(tensor['sxx'][iObs] * tensor['syy'][iObs] + 
+                          tensor['sxx'][iObs] * tensor['szz'][iObs] +
+                          tensor['syy'][iObs] * tensor['szz'][iObs] -
+                          tensor['sxy'][iObs] * tensor['sxy'][iObs] -
+                          tensor['sxz'][iObs] * tensor['sxz'][iObs] -
+                          tensor['syz'][iObs] * tensor['syz'][iObs])
+        invariant3.append(tensor['sxx'][iObs] * tensor['syy'][iObs] * tensor['szz'][iObs] +
+                          2 * tensor['sxy'][iObs] * tensor['sxz'][iObs] * tensor['syz'][iObs] -
+                          tensor['sxx'][iObs] * tensor['syz'][iObs] * tensor['syz'][iObs] -
+                          tensor['syy'][iObs] * tensor['sxz'][iObs] * tensor['sxz'][iObs] -
+                          tensor['szz'][iObs] * tensor['sxy'][iObs] * tensor['sxy'][iObs])
+    return(invariant1, invariant2, invariant3)
+
+
+def calcDeviatoricTensor(tensor):
+    sxxDeviatoric = []
+    syyDeviatoric = []
+    szzDeviatoric = []
+    for iObs in range(0, len(tensor['sxx'])): # Compute deviatoric tensor at each observation coordinate
+        isotropicComponent = 1.0 / 3.0 * (tensor['sxx'][iObs] + tensor['syy'][iObs] + tensor['szz'][iObs])
+        sxxDeviatoric.append(tensor['sxx'][iObs] - isotropicComponent)
+        syyDeviatoric.append(tensor['syy'][iObs] - isotropicComponent)
+        szzDeviatoric.append(tensor['szz'][iObs] - isotropicComponent)
+    return(sxxDeviatoric, syyDeviatoric, szzDeviatoric)
+
+
 def main():
     # Name of Srcmod file to read
     fileName = 's1999HECTOR01SALI'
@@ -571,7 +635,7 @@ def main():
     obsX, obsY, obsZ = diskObservationPoints(obsDepth, EventSrcmod['epicenterXUtm'], EventSrcmod['epicenterYUtm'])
 
     # Calculate displacement vector and stress tensor at observation coordinates
-    DisplacementVector, StressTensor = calcOkadaDisplacementStress(obsX, obsY, obsZ, EventSrcmod, lambdaLame, muLame, useUtm)
+    DisplacementVector, StrainTensor, StressTensor = calcOkadaDisplacementStress(obsX, obsY, obsZ, EventSrcmod, lambdaLame, muLame, useUtm)
 
     # Resolve Coulomb failure stresses on reciever plane
     Cfs['cfs'] = calcCfs(StressTensor, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
@@ -585,20 +649,28 @@ def main():
     # Calculate Coulomb failure stress at ISC event locations
     Catalog['cfs'] = []
     for iIsc in range(0, len(Catalog['xUtm'])):
-        DisplacementVectorIsc, StressTensorIsc = calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
-                                                                             np.array([Catalog['yUtm'][iIsc]]), 
-                                                                             np.array([Catalog['depth'][iIsc]]), 
-                                                                             EventSrcmod, lambdaLame, muLame, useUtm)
+        DisplacementVectorIsc, StrainTensorIsc, StressTensorIsc = calcOkadaDisplacementStress(np.array([Catalog['xUtm'][iIsc]]), 
+                                                                                              np.array([Catalog['yUtm'][iIsc]]), 
+                                                                                              np.array([Catalog['depth'][iIsc]]), 
+                                                                                              EventSrcmod, lambdaLame, muLame, useUtm)
         Catalog['cfs'].append(calcCfs(StressTensorIsc, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)[0])
     
+    # Calculate maximum shear
+    maximumShear = calcMaximumShear(StressTensorIsc)
+
+    # Calculate invariants
+    invariant1, invariant2, invariant3 = calcTensorInvariants(StressTensorIsc)
+
+    # Calculate deviatoric stress tensor
+    sxxDeviatoric, syyDeviatoric, szzDeviatoric = calcDeviatoricTensor(StressTensorIsc)
+
     # Plot CFS with SRCMOD event and ISC events
     plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog)
     plt.show()
 
-#    print iscCfsPositives, iscCfsNegatives
-
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
+
 
 if __name__ == '__main__':
    main()
