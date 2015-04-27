@@ -396,7 +396,7 @@ def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLam
     return(DisplacementVector, StrainTensor, StressTensor)
 
 
-def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
+def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog, obsDepth):
     # Clip CFS values for plotting purposes
     cfsHighIdx1 = (Cfs['cfs']>Cfs['cfsUpperLimit']).nonzero()
     cfsHighIdx2 = (Cfs['cfs']>0).nonzero()
@@ -427,13 +427,26 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
 
     # Plot scale bar
     ax.plot([-100e3 + EventSrcmod['epicenterXUtm'], -50e3 + EventSrcmod['epicenterXUtm']], 
-            [-100e3 + EventSrcmod['epicenterYUtm'], -100e3 + EventSrcmod['epicenterYUtm']], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.text(-75e3 + EventSrcmod['epicenterXUtm'], -110e3 + EventSrcmod['epicenterYUtm'], '50 km', fontsize=12, verticalalignment='center', horizontalalignment='center')
+            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm']], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.text(-75e3 + EventSrcmod['epicenterXUtm'], -130e3 + EventSrcmod['epicenterYUtm'], '50 km', fontsize=10, verticalalignment='center', horizontalalignment='center')
 
-    # Plot orientation of reciever plane
-    ax.plot([75e3 + EventSrcmod['epicenterXUtm'], 75e3 + EventSrcmod['epicenterXUtm'] + 10e3*Cfs['nVecInPlane'][0]], [-100e3 + EventSrcmod['epicenterYUtm'], -100e3 + EventSrcmod['epicenterYUtm'] + 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.plot([75e3 + EventSrcmod['epicenterXUtm'], 75e3 + EventSrcmod['epicenterXUtm'] - 10e3*Cfs['nVecInPlane'][0]], [-100e3 + EventSrcmod['epicenterYUtm'], -100e3 + EventSrcmod['epicenterYUtm'] - 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.plot(75e3 + EventSrcmod['epicenterXUtm'], -100e3 + EventSrcmod['epicenterYUtm'], color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
+    # Plot azimuth of reciever plane
+    ax.plot([-20e3 + EventSrcmod['epicenterXUtm'], -20e3 + EventSrcmod['epicenterXUtm'] + 10e3*Cfs['nVecInPlane'][0]], 
+            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm'] + 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.plot([-20e3 + EventSrcmod['epicenterXUtm'], -20e3 + EventSrcmod['epicenterXUtm'] - 10e3*Cfs['nVecInPlane'][0]], 
+            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm'] - 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.plot(-20e3+EventSrcmod['epicenterXUtm'], -125e3 + EventSrcmod['epicenterYUtm'], color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
+
+    # Plot dip of reciever plane (hard coded for now NNN)
+    ax.plot([20e3 + EventSrcmod['epicenterXUtm'], 20e3 + EventSrcmod['epicenterXUtm'] - 0e3*Cfs['nVecInPlane'][0]], 
+            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm'] - 10e3*Cfs['nVecInPlane'][1]], color='r', linewidth=1)
+    ax.plot(20e3+EventSrcmod['epicenterXUtm'], -125e3 + EventSrcmod['epicenterYUtm'], color='r', linewidth=1, marker='o', markersize=5, markerfacecolor='r')
+
+
+    # plot text for depth, azimuth, and dip
+    ax.text(-75e3 + EventSrcmod['epicenterXUtm'], -110e3 + EventSrcmod['epicenterYUtm'], 'depth = ' + str(obsDepth) + ' (km)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+    ax.text(75e3 + EventSrcmod['epicenterXUtm'], -110e3 + EventSrcmod['epicenterYUtm'], 'azimuth = ' + str(Cfs['faultAzimuth']) + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+    ax.text(75e3 + EventSrcmod['epicenterXUtm'], -120e3 + EventSrcmod['epicenterYUtm'], 'dip = ' + str(Cfs['faultDip']) + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
 
     # Plot ISC earthquake locations if they are close enough to the epicenter
     for iIsc in range(0, len(Catalog['xUtm'])):
@@ -451,7 +464,7 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
     cbar.ax.set_xlabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
     cbar.ax.tick_params(length=0)
     ax.set_xlim([-110e3 + EventSrcmod['epicenterXUtm'], 110e3 + EventSrcmod['epicenterXUtm']])
-    ax.set_ylim([-110e3 + EventSrcmod['epicenterYUtm'], 120e3 + EventSrcmod['epicenterYUtm']])
+    ax.set_ylim([-140e3 + EventSrcmod['epicenterYUtm'], 120e3 + EventSrcmod['epicenterYUtm']])
 
     # Plot CFS as a function of distance from SRCMOD epicenter
     plt.subplot(3, 2, 2)
@@ -509,9 +522,9 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog):
 
 def diskObservationPoints(obsDepth, xOffset, yOffset):
     # Observation coordinates on a circular grid
-    # This was taken from the internet (stackoverflow???)
-    n_angles = 10
-    n_radii = 10
+    # http://matplotlib.org/1.4.3/examples/pylab_examples/tricontour_demo.html
+    n_angles = 300
+    n_radii = 300
     radii = np.linspace(0, 1, n_radii)
     radii = 100e3 * np.sqrt(radii)
     angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
@@ -617,6 +630,7 @@ def main():
     obsDepth = -5e3; # depth of observation coordinates just for disc visualization
     Cfs = dict()
     Cfs['faultAzimuth'] = -35; # Degrees from NNN?
+    Cfs['faultDip'] = 90;
     Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'])
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
@@ -655,17 +669,17 @@ def main():
                                                                                               EventSrcmod, lambdaLame, muLame, useUtm)
         Catalog['cfs'].append(calcCfs(StressTensorIsc, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)[0])
     
-    # Calculate maximum shear
+    # Calculate maximum shear magnitude (not yet orientation!)
     maximumShear = calcMaximumShear(StressTensorIsc)
 
-    # Calculate invariants
+    # Calculate stress invariants
     invariant1, invariant2, invariant3 = calcTensorInvariants(StressTensorIsc)
 
     # Calculate deviatoric stress tensor
     sxxDeviatoric, syyDeviatoric, szzDeviatoric = calcDeviatoricTensor(StressTensorIsc)
 
     # Plot CFS with SRCMOD event and ISC events
-    plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog)
+    plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog, obsDepth)
     plt.show()
 
     # Provide keyboard control to interact with variables
