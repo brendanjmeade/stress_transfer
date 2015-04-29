@@ -287,29 +287,81 @@ def readSrcmodFile(fileName):
     return(EventSrcmod)
 
 
-def calcCfs(StressTensor, nVecNormal, nVecInPlane, coefficientOfFriction):
-    cfs = np.zeros(np.shape(StressTensor['sxx']))
-    for iObs in range(0, len(StressTensor['sxx'])):
-        deltaTau = (StressTensor['sxx'][iObs] * nVecNormal[0] * nVecInPlane[0] + 
-                    StressTensor['sxy'][iObs] * nVecNormal[1] * nVecInPlane[0] + 
-                    StressTensor['sxz'][iObs] * nVecNormal[2] * nVecInPlane[0] + 
-                    StressTensor['sxy'][iObs] * nVecNormal[0] * nVecInPlane[1] + 
-                    StressTensor['syy'][iObs] * nVecNormal[1] * nVecInPlane[1] + 
-                    StressTensor['syz'][iObs] * nVecNormal[2] * nVecInPlane[1] + 
-                    StressTensor['sxz'][iObs] * nVecNormal[0] * nVecInPlane[2] + 
-                    StressTensor['syz'][iObs] * nVecNormal[1] * nVecInPlane[2] + 
-                    StressTensor['szz'][iObs] * nVecNormal[2] * nVecInPlane[2])
-        deltaSigma = (StressTensor['sxx'][iObs] * nVecNormal[0] * nVecNormal[0] + 
-                      StressTensor['sxy'][iObs] * nVecNormal[1] * nVecNormal[0] + 
-                      StressTensor['sxz'][iObs] * nVecNormal[2] * nVecNormal[0] + 
-                      StressTensor['sxy'][iObs] * nVecNormal[0] * nVecNormal[1] + 
-                      StressTensor['syy'][iObs] * nVecNormal[1] * nVecNormal[1] + 
-                      StressTensor['syz'][iObs] * nVecNormal[2] * nVecNormal[1] + 
-                      StressTensor['sxz'][iObs] * nVecNormal[0] * nVecNormal[2] + 
-                      StressTensor['syz'][iObs] * nVecNormal[1] * nVecNormal[2] + 
-                      StressTensor['szz'][iObs] * nVecNormal[2] * nVecNormal[2])
+def calcCfs(Tensor, nVecNormal, nVecInPlane, coefficientOfFriction):
+    cfs = np.zeros(np.shape(Tensor['sxx']))
+    for iObs in range(0, len(Tensor['sxx'])):
+        deltaTau = (Tensor['sxx'][iObs] * nVecNormal[0] * nVecInPlane[0] + 
+                    Tensor['sxy'][iObs] * nVecNormal[1] * nVecInPlane[0] + 
+                    Tensor['sxz'][iObs] * nVecNormal[2] * nVecInPlane[0] + 
+                    Tensor['sxy'][iObs] * nVecNormal[0] * nVecInPlane[1] + 
+                    Tensor['syy'][iObs] * nVecNormal[1] * nVecInPlane[1] + 
+                    Tensor['syz'][iObs] * nVecNormal[2] * nVecInPlane[1] + 
+                    Tensor['sxz'][iObs] * nVecNormal[0] * nVecInPlane[2] + 
+                    Tensor['syz'][iObs] * nVecNormal[1] * nVecInPlane[2] + 
+                    Tensor['szz'][iObs] * nVecNormal[2] * nVecInPlane[2])
+        deltaSigma = (Tensor['sxx'][iObs] * nVecNormal[0] * nVecNormal[0] + 
+                      Tensor['sxy'][iObs] * nVecNormal[1] * nVecNormal[0] + 
+                      Tensor['sxz'][iObs] * nVecNormal[2] * nVecNormal[0] + 
+                      Tensor['sxy'][iObs] * nVecNormal[0] * nVecNormal[1] + 
+                      Tensor['syy'][iObs] * nVecNormal[1] * nVecNormal[1] + 
+                      Tensor['syz'][iObs] * nVecNormal[2] * nVecNormal[1] + 
+                      Tensor['sxz'][iObs] * nVecNormal[0] * nVecNormal[2] + 
+                      Tensor['syz'][iObs] * nVecNormal[1] * nVecNormal[2] + 
+                      Tensor['szz'][iObs] * nVecNormal[2] * nVecNormal[2])
         cfs[iObs] = deltaTau - coefficientOfFriction * deltaSigma
     return(cfs)
+
+
+def calcCfsNormal(Tensor, nVecNormal, nVecInPlane, coefficientOfFriction):
+    cfsNormal = np.zeros(np.shape(Tensor['sxx']))
+    for iObs in range(0, len(Tensor['sxx'])):
+        deltaSigma = (Tensor['sxx'][iObs] * nVecNormal[0] * nVecNormal[0] + 
+                      Tensor['sxy'][iObs] * nVecNormal[1] * nVecNormal[0] + 
+                      Tensor['sxz'][iObs] * nVecNormal[2] * nVecNormal[0] + 
+                      Tensor['sxy'][iObs] * nVecNormal[0] * nVecNormal[1] + 
+                      Tensor['syy'][iObs] * nVecNormal[1] * nVecNormal[1] + 
+                      Tensor['syz'][iObs] * nVecNormal[2] * nVecNormal[1] + 
+                      Tensor['sxz'][iObs] * nVecNormal[0] * nVecNormal[2] + 
+                      Tensor['syz'][iObs] * nVecNormal[1] * nVecNormal[2] + 
+                      Tensor['szz'][iObs] * nVecNormal[2] * nVecNormal[2])
+        cfs[iObs] = -coefficientOfFriction * deltaSigma
+    return(cfsNormal)
+
+
+def calcCfsTotal(Tensor, nVecNormal, nVecInPlane, coefficientOfFriction):
+    cfsTotal = np.zeros(np.shape(Tensor['sxx']))
+    nVecCross = np.cross(nVecNormal, nVecInPlane)
+    for iObs in range(0, len(Tensor['sxx'])):
+        deltaTau1 = (Tensor['sxx'][iObs] * nVecNormal[0] * nVecInPlane[0] + 
+                     Tensor['sxy'][iObs] * nVecNormal[1] * nVecInPlane[0] + 
+                     Tensor['sxz'][iObs] * nVecNormal[2] * nVecInPlane[0] + 
+                     Tensor['sxy'][iObs] * nVecNormal[0] * nVecInPlane[1] + 
+                     Tensor['syy'][iObs] * nVecNormal[1] * nVecInPlane[1] + 
+                     Tensor['syz'][iObs] * nVecNormal[2] * nVecInPlane[1] + 
+                     Tensor['sxz'][iObs] * nVecNormal[0] * nVecInPlane[2] + 
+                     Tensor['syz'][iObs] * nVecNormal[1] * nVecInPlane[2] + 
+                     Tensor['szz'][iObs] * nVecNormal[2] * nVecInPlane[2])
+        deltaTau2 = (Tensor['sxx'][iObs] * nVecNormal[0] * nVecCross[0] + 
+                     Tensor['sxy'][iObs] * nVecNormal[1] * nVecCross[0] + 
+                     Tensor['sxz'][iObs] * nVecNormal[2] * nVecCross[0] + 
+                     Tensor['sxy'][iObs] * nVecNormal[0] * nVecCross[1] + 
+                     Tensor['syy'][iObs] * nVecNormal[1] * nVecCross[1] + 
+                     Tensor['syz'][iObs] * nVecNormal[2] * nVecCross[1] + 
+                     Tensor['sxz'][iObs] * nVecNormal[0] * nVecCross[2] + 
+                     Tensor['syz'][iObs] * nVecNormal[1] * nVecCross[2] + 
+                     Tensor['szz'][iObs] * nVecNormal[2] * nVecCross[2])
+        deltaSigma = (Tensor['sxx'][iObs] * nVecNormal[0] * nVecNormal[0] + 
+                      Tensor['sxy'][iObs] * nVecNormal[1] * nVecNormal[0] + 
+                      Tensor['sxz'][iObs] * nVecNormal[2] * nVecNormal[0] + 
+                      Tensor['sxy'][iObs] * nVecNormal[0] * nVecNormal[1] + 
+                      Tensor['syy'][iObs] * nVecNormal[1] * nVecNormal[1] + 
+                      Tensor['syz'][iObs] * nVecNormal[2] * nVecNormal[1] + 
+                      Tensor['sxz'][iObs] * nVecNormal[0] * nVecNormal[2] + 
+                      Tensor['syz'][iObs] * nVecNormal[1] * nVecNormal[2] + 
+                      Tensor['szz'][iObs] * nVecNormal[2] * nVecNormal[2])
+        cfsTotal[iObs] = np.abs(deltaTau1) + np.abs(deltaTau2) - coefficientOfFriction * deltaSigma
+    return(cfsTotal)
+
 
 
 def calcOkadaDisplacementStress(xVec, yVec, zVec, EventSrcmod, lambdaLame, muLame, useUtm):
@@ -538,14 +590,20 @@ def diskObservationPoints(obsDepth, xOffset, yOffset):
     return(xVec, yVec, zVec)
 
 
-def cfsVectorsFromAzimuth(faultAzimuth):
+def cfsVectorsFromAzimuth(faultAzimuth, faultDip):
+    # Need to check these updates
     nVecInPlaneRef = [0, 1, 0]
-    nVecNormalRef = [1, 0, 0]
+    nVecNormalRef = [0, 0, 1]
     rTempAzimuth = np.array([[math.cos(math.radians(faultAzimuth)), math.sin(math.radians(faultAzimuth)), 0],
-                      [-math.sin(math.radians(faultAzimuth)), math.cos(math.radians(faultAzimuth)), 0],
-                      [0, 0, 1]])
+                             [-math.sin(math.radians(faultAzimuth)), math.cos(math.radians(faultAzimuth)), 0],
+                             [0, 0, 1]])
+    rTempDip = np.array([[math.cos(math.radians(faultDip)), 0, math.sin(math.radians(faultDip))],
+                         [0, 1, 0],
+                         [-math.sin(math.radians(faultDip)), 0, math.cos(math.radians(faultDip))]])
     nVecInPlane = np.dot(rTempAzimuth, nVecInPlaneRef)
+    nVecInPlane = np.dot(rTempDip, nVecInPlane)
     nVecNormal = np.dot(rTempAzimuth, nVecNormalRef)
+    nVecNormal = np.dot(rTempDip, nVecNormal)
     return(nVecInPlane, nVecNormal)
 
 
@@ -631,7 +689,7 @@ def main():
     Cfs = dict()
     Cfs['faultAzimuth'] = -35; # Degrees from NNN?
     Cfs['faultDip'] = 90;
-    Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'])
+    Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'], Cfs['faultDip'])
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
