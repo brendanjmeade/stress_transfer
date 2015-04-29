@@ -575,8 +575,8 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog, obsDep
 def diskObservationPoints(obsDepth, xOffset, yOffset):
     # Observation coordinates on a circular grid
     # http://matplotlib.org/1.4.3/examples/pylab_examples/tricontour_demo.html
-    n_angles = 300
-    n_radii = 300
+    n_angles = 30
+    n_radii = 30
     radii = np.linspace(0, 1, n_radii)
     radii = 100e3 * np.sqrt(radii)
     angles = np.linspace(0, 2*math.pi, n_angles, endpoint=False)
@@ -593,13 +593,21 @@ def diskObservationPoints(obsDepth, xOffset, yOffset):
 def cfsVectorsFromAzimuth(faultAzimuth, faultDip):
     # Need to check these updates
     nVecInPlaneRef = [0, 1, 0]
-    nVecNormalRef = [0, 0, 1]
+    nVecNormalRef = [1, 0, 0]
+
+    print faultDip
+    if faultDip <= 90:
+        faultDip = 90-faultDip
+
+    print faultDip
     rTempAzimuth = np.array([[math.cos(math.radians(faultAzimuth)), math.sin(math.radians(faultAzimuth)), 0],
                              [-math.sin(math.radians(faultAzimuth)), math.cos(math.radians(faultAzimuth)), 0],
                              [0, 0, 1]])
-    rTempDip = np.array([[math.cos(math.radians(faultDip)), 0, math.sin(math.radians(faultDip))],
-                         [0, 1, 0],
-                         [-math.sin(math.radians(faultDip)), 0, math.cos(math.radians(faultDip))]])
+    rTempDip = np.array([[math.cos(math.radians(faultDip)), math.sin(math.radians(faultDip)), 0],
+                         [-math.sin(math.radians(faultDip)), math.cos(math.radians(faultDip)), 0],
+                         [0, 0, 1]])
+    print rTempDip
+
     nVecInPlane = np.dot(rTempAzimuth, nVecInPlaneRef)
     nVecInPlane = np.dot(rTempDip, nVecInPlane)
     nVecNormal = np.dot(rTempAzimuth, nVecNormalRef)
@@ -690,6 +698,8 @@ def main():
     Cfs['faultAzimuth'] = -35; # Degrees from NNN?
     Cfs['faultDip'] = 90;
     Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'], Cfs['faultDip'])
+#    Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'])
+
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
