@@ -4,6 +4,7 @@ import code
 import datetime
 import urllib
 import utm
+import shapely
 import os.path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -482,23 +483,10 @@ def plotSrcmodStressAndEarthquakes(EventSrcmod, xVec, yVec, Cfs, Catalog, obsDep
             [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm']], color=[0.0, 0.0, 0.0], linewidth=1)
     ax.text(-75e3 + EventSrcmod['epicenterXUtm'], -130e3 + EventSrcmod['epicenterYUtm'], '50 km', fontsize=10, verticalalignment='center', horizontalalignment='center')
 
-    # Plot azimuth of reciever plane
-    ax.plot([-20e3 + EventSrcmod['epicenterXUtm'], -20e3 + EventSrcmod['epicenterXUtm'] + 10e3*Cfs['nVecInPlane'][0]], 
-            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm'] + 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.plot([-20e3 + EventSrcmod['epicenterXUtm'], -20e3 + EventSrcmod['epicenterXUtm'] - 10e3*Cfs['nVecInPlane'][0]], 
-            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm'] - 10e3*Cfs['nVecInPlane'][1]], color=[0.0, 0.0, 0.0], linewidth=1)
-    ax.plot(-20e3+EventSrcmod['epicenterXUtm'], -125e3 + EventSrcmod['epicenterYUtm'], color=[0.0, 0.0, 0.0], linewidth=1, marker='o', markersize=5, markerfacecolor='k')
-
-    # Plot dip of reciever plane (hard coded for now NNN)
-    ax.plot([20e3 + EventSrcmod['epicenterXUtm'], 20e3 + EventSrcmod['epicenterXUtm'] - 0e3*Cfs['nVecInPlane'][0]], 
-            [-125e3 + EventSrcmod['epicenterYUtm'], -125e3 + EventSrcmod['epicenterYUtm'] - 10e3*Cfs['nVecInPlane'][1]], color='r', linewidth=1)
-    ax.plot(20e3+EventSrcmod['epicenterXUtm'], -125e3 + EventSrcmod['epicenterYUtm'], color='r', linewidth=1, marker='o', markersize=5, markerfacecolor='r')
-
-
-    # plot text for depth, azimuth, and dip
+    # Plot text for depth, azimuth, and dip
     ax.text(-75e3 + EventSrcmod['epicenterXUtm'], -110e3 + EventSrcmod['epicenterYUtm'], 'depth = ' + str(obsDepth) + ' (km)', fontsize=10, verticalalignment='center', horizontalalignment='center')
-    ax.text(75e3 + EventSrcmod['epicenterXUtm'], -110e3 + EventSrcmod['epicenterYUtm'], 'azimuth = ' + str(Cfs['faultAzimuth']) + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
-    ax.text(75e3 + EventSrcmod['epicenterXUtm'], -120e3 + EventSrcmod['epicenterYUtm'], 'dip = ' + str(Cfs['faultDip']) + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+    ax.text(75e3 + EventSrcmod['epicenterXUtm'], -110e3 + EventSrcmod['epicenterYUtm'], 'azimuth = ' + '%0.2f' % Cfs['faultAzimuth'] + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+    ax.text(75e3 + EventSrcmod['epicenterXUtm'], -120e3 + EventSrcmod['epicenterYUtm'], 'dip = ' +  '%0.2f' % Cfs['faultDip'] + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
 
     # Plot ISC earthquake locations if they are close enough to the epicenter
     for iIsc in range(0, len(Catalog['xUtm'])):
@@ -594,20 +582,13 @@ def cfsVectorsFromAzimuth(faultAzimuth, faultDip):
     # Need to check these updates
     nVecInPlaneRef = [0, 1, 0]
     nVecNormalRef = [1, 0, 0]
-
-    print faultDip
-    if faultDip <= 90:
-        faultDip = 90-faultDip
-
-    print faultDip
+    rotationAngle = faultDip - 90 # This is the angle through wich we rotation nVecNormalRef
     rTempAzimuth = np.array([[math.cos(math.radians(faultAzimuth)), math.sin(math.radians(faultAzimuth)), 0],
                              [-math.sin(math.radians(faultAzimuth)), math.cos(math.radians(faultAzimuth)), 0],
                              [0, 0, 1]])
-    rTempDip = np.array([[math.cos(math.radians(faultDip)), math.sin(math.radians(faultDip)), 0],
-                         [-math.sin(math.radians(faultDip)), math.cos(math.radians(faultDip)), 0],
+    rTempDip = np.array([[math.cos(math.radians(rotationAngle)), math.sin(math.radians(rotationAngle)), 0],
+                         [-math.sin(math.radians(rotationAngle)), math.cos(math.radians(rotationAngle)), 0],
                          [0, 0, 1]])
-    print rTempDip
-
     nVecInPlane = np.dot(rTempAzimuth, nVecInPlaneRef)
     nVecInPlane = np.dot(rTempDip, nVecInPlane)
     nVecNormal = np.dot(rTempAzimuth, nVecNormalRef)
@@ -692,12 +673,9 @@ def main():
     # Parameters for CFS calculation and visualization
     lambdaLame = 3e10 # First Lame parameter (Pascals)
     muLame = 3e10 # Second Lame parameter (shear modulus, Pascals)
-    coefficientOfFriction = 0.4 # Coefficient of friction
+    coefficientOfFriction = 0.85 # Coefficient of friction
     obsDepth = -5e3; # depth of observation coordinates just for disc visualization
     Cfs = dict()
-    Cfs['faultAzimuth'] = -35; # Degrees from NNN?
-    Cfs['faultDip'] = 90;
-    Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'], Cfs['faultDip'])
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
@@ -718,6 +696,9 @@ def main():
     DisplacementVector, StrainTensor, StressTensor = calcOkadaDisplacementStress(obsX, obsY, obsZ, EventSrcmod, lambdaLame, muLame, useUtm)
 
     # Resolve Coulomb failure stresses on reciever plane
+    Cfs['faultAzimuth'] = EventSrcmod['strikeMean']
+    Cfs['faultDip'] = EventSrcmod['dipMean']
+    Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'], Cfs['faultDip'])
     Cfs['cfs'] = calcCfs(StressTensor, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
 
     # Read in ISC data for capture days after the date of the SRCMOD event
