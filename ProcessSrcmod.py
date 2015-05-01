@@ -692,14 +692,12 @@ def main():
     # Parameters for CFS calculation and visualization
     lambdaLame = 3e10 # First Lame parameter (Pascals)
     muLame = 3e10 # Second Lame parameter (shear modulus, Pascals)
-    coefficientOfFriction = 0.85 # Coefficient of friction
+    coefficientOfFriction = 0.4 # Coefficient of friction
     obsDepth = -5e3; # depth of observation coordinates just for disc visualization
     Cfs = dict()
     Cfs['faultAzimuth'] = -35; # Degrees from NNN?
     Cfs['faultDip'] = 90;
     Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'], Cfs['faultDip'])
-#    Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'])
-
     Cfs['cfsUpperLimit'] = 1e5; # for visualziation purposes
     Cfs['cfsLowerLimit'] = -1e5; # for visualization purposes
     useUtm = True
