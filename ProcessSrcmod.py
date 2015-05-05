@@ -4,7 +4,6 @@ import code
 import datetime
 import urllib
 import utm
-import shapely
 import os.path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,6 +11,13 @@ import mpl_toolkits.basemap.pyproj as pyproj
 from scipy import io as sio
 from okada_wrapper import dc3d0wrapper, dc3dwrapper
 from matplotlib import cm
+
+# For buffering around fault shape
+from shapely.ops import cascaded_union
+from shapely.geometry import Point
+import random
+from matplotlib.patches import Polygon
+
 
 # Function to check to see if a string can be converted into a float.  Useful for error checking.
 def isNumber(s):
@@ -726,7 +732,25 @@ def main():
     sxxDeviatoric, syyDeviatoric, szzDeviatoric = calcDeviatoricTensor(StressTensorIsc)
 
     # Plot CFS with SRCMOD event and ISC events
-    plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog, obsDepth)
+    #plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog, obsDepth)
+    #plt.show()
+
+    # Create buffer around fault with shapely
+    circles = []
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+        circles.append(Point(EventSrcmod['x1Utm'][iPatch], EventSrcmod['y1Utm'][iPatch]).buffer(nearFieldDistance))
+        circles.append(Point(EventSrcmod['x2Utm'][iPatch], EventSrcmod['y2Utm'][iPatch]).buffer(nearFieldDistance))
+        circles.append(Point(EventSrcmod['x3Utm'][iPatch], EventSrcmod['y3Utm'][iPatch]).buffer(nearFieldDistance))
+        circles.append(Point(EventSrcmod['x4Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]).buffer(nearFieldDistance))
+    polygons = cascaded_union(circles)
+    temp = np.array(polygons.exterior).flatten()
+    xBuffer = temp[0::2]
+    yBuffer = temp[1::2]
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=0.5)
+    ax.relim()
+    ax.autoscale()
     plt.show()
 
     # Provide keyboard control to interact with variables
