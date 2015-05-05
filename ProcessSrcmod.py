@@ -672,6 +672,21 @@ def calcDeviatoricTensor(tensor):
     return(sxxDeviatoric, syyDeviatoric, szzDeviatoric)
 
 
+def calcFaultBuffer(EventSrcmod, distance):
+    # Create buffer around fault with shapely
+    circles = []
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+        circles.append(Point(EventSrcmod['x1Utm'][iPatch], EventSrcmod['y1Utm'][iPatch]).buffer(distance))
+        circles.append(Point(EventSrcmod['x2Utm'][iPatch], EventSrcmod['y2Utm'][iPatch]).buffer(distance))
+        circles.append(Point(EventSrcmod['x3Utm'][iPatch], EventSrcmod['y3Utm'][iPatch]).buffer(distance))
+        circles.append(Point(EventSrcmod['x4Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]).buffer(distance))
+    polygons = cascaded_union(circles)
+    temp = np.array(polygons.exterior).flatten()
+    xBuffer = temp[0::2]
+    yBuffer = temp[1::2]
+    return(xBuffer, yBuffer)
+
+
 def main():
     # Name of Srcmod file to read
     fileName = 's1999HECTOR01SALI'
@@ -735,20 +750,18 @@ def main():
     #plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog, obsDepth)
     #plt.show()
 
-    # Create buffer around fault with shapely
-    circles = []
-    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
-        circles.append(Point(EventSrcmod['x1Utm'][iPatch], EventSrcmod['y1Utm'][iPatch]).buffer(nearFieldDistance))
-        circles.append(Point(EventSrcmod['x2Utm'][iPatch], EventSrcmod['y2Utm'][iPatch]).buffer(nearFieldDistance))
-        circles.append(Point(EventSrcmod['x3Utm'][iPatch], EventSrcmod['y3Utm'][iPatch]).buffer(nearFieldDistance))
-        circles.append(Point(EventSrcmod['x4Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]).buffer(nearFieldDistance))
-    polygons = cascaded_union(circles)
-    temp = np.array(polygons.exterior).flatten()
-    xBuffer = temp[0::2]
-    yBuffer = temp[1::2]
+
+    # Generate regular grid over region inside of fault buffer
+    xBuffer, yBuffer = calcFaultBuffer(EventSrcmod, nearFieldDistance)
+    xBufferFillVec = np.arange(np.min(xBuffer), np.max(xBuffer), 2e3)
+    yBufferFillVec = np.arange(np.min(yBuffer), np.max(yBuffer), 2e3)
+    xBufferFillGrid, yBufferFillGrid = np.meshgrid(xBufferFillVec, yBufferFillVec)
+
 
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=0.5)
+    ax.plot(xBufferFillGrid, yBufferFillGrid, 'ro', linewidth=0.0)
+
     ax.relim()
     ax.autoscale()
     plt.show()
