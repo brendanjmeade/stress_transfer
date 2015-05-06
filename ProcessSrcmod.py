@@ -707,6 +707,115 @@ def calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid):
     return(xBufferFillGridVec, yBufferFillGridVec)
 
 
+def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, obsDepth, xBuffer, yBuffer):
+    # Clip CFS values for plotting purposes
+    cfsHighIdx1 = (Cfs['cfs']>Cfs['cfsUpperLimit']).nonzero()
+    cfsHighIdx2 = (Cfs['cfs']>0).nonzero()
+    cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
+    cfsLowIdx1 = (Cfs['cfs']<Cfs['cfsLowerLimit']).nonzero()
+    cfsLowIdx2 = (Cfs['cfs']<0).nonzero()
+    cfsLowIdx = np.intersect1d(np.array(cfsLowIdx1), np.array(cfsLowIdx2))
+    Cfs['cfs'][cfsHighIdx] = Cfs['cfsUpperLimit']
+    Cfs['cfs'][cfsLowIdx] = Cfs['cfsLowerLimit']
+
+    # Generate figure showing fault geometry and CFS field
+    fig = plt.figure(facecolor='white', figsize=(10, 6), dpi=100)
+    plt.subplot(1, 2, 1)
+    ax = fig.gca()
+    cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
+    cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 0, linewidths=1.0, colors='k', origin='lower', hold='on')
+
+    # Draw the buffer perimeter
+    ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=1.0)
+
+    for iPatch in range(0, len(EventSrcmod['x1'])): # Plot the edges of each fault patch fault patches
+        ax.plot([EventSrcmod['x1Utm'][iPatch], EventSrcmod['x2Utm'][iPatch]], [EventSrcmod['y1Utm'][iPatch], EventSrcmod['y2Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x2Utm'][iPatch], EventSrcmod['x4Utm'][iPatch]], [EventSrcmod['y2Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x1Utm'][iPatch], EventSrcmod['x3Utm'][iPatch]], [EventSrcmod['y1Utm'][iPatch], EventSrcmod['y3Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+        ax.plot([EventSrcmod['x3Utm'][iPatch], EventSrcmod['x4Utm'][iPatch]], [EventSrcmod['y3Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]], color=[0.0, 0.0, 0.0], linewidth=0.5)
+
+    # Plot scale bar
+    ax.plot([-100e3 + EventSrcmod['epicenterXUtm'], -50e3 + EventSrcmod['epicenterXUtm']], 
+            [np.min(yBuffer) - 20e3, np.min(yBuffer) - 20e3], color=[0.0, 0.0, 0.0], linewidth=1)
+    ax.text(-75e3 + EventSrcmod['epicenterXUtm'], np.min(yBuffer) - 30e3, '50 km', fontsize=10, verticalalignment='center', horizontalalignment='center')
+
+    # Plot text for depth, azimuth, and dip
+    ax.text(-75e3 + EventSrcmod['epicenterXUtm'], np.min(yBuffer) - 10e3, r'$d = $' + str(obsDepth) + ' (km)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+    ax.text(75e3 + EventSrcmod['epicenterXUtm'], np.min(yBuffer) - 10e3, r'$\alpha = $' + '%0.2f' % Cfs['faultAzimuth'] + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+    ax.text(75e3 + EventSrcmod['epicenterXUtm'], np.min(yBuffer) - 20e3, r'$\delta = $' +  '%0.2f' % Cfs['faultDip'] + ' (deg)', fontsize=10, verticalalignment='center', horizontalalignment='center')
+
+    # Plot ISC earthquake locations if they are close enough to the epicenter
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        ax.plot(Catalog['xUtm'][iIsc], Catalog['yUtm'][iIsc], marker='o', color='white', linestyle='none',
+                markerfacecoloralt='gray', markersize=5, alpha=1.0)
+
+    # Standard decorations
+    plt.title(EventSrcmod['tag'])
+    plt.xlabel('x (m)')
+    plt.ylabel('y (m)')
+    plt.axis('equal')
+    plt.axis('off') # turning off axes labels...replaced with scale bar
+    cbar = plt.colorbar(cs, shrink=0.3, pad=0.05, aspect=25.0,
+                        orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
+    cbar.ax.set_xlabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    cbar.ax.tick_params(length=0)
+    ax.set_xlim([np.min(xBuffer) - 10e3, np.max(xBuffer) + 10e3])
+    ax.set_ylim([np.min(yBuffer) - 10e3, np.max(yBuffer) + 10e3])
+
+    # Plot CFS as a function of distance from SRCMOD epicenter
+    plt.subplot(3, 2, 2)
+    ax = fig.gca()
+    ax.plot([3.0, 5.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
+    iscCfsPositives = 0
+    iscCfsNegatives = 0
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            iscCfsPositives = iscCfsPositives + 1
+            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), 1e-6*Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            iscCfsNegatives = iscCfsNegatives + 1
+            ax.plot(np.log10(Catalog['distanceToEpicenter'][iIsc]), 1e-6*Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    ax.set_xlim([3.0, 5.0])
+    ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$\log_{10}\,d \, \mathrm{(m)}$')
+    plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    plt.title(r'$N(\Delta\mathrm{CFS}>0) = $' + str(iscCfsPositives) + ', $N(\Delta\mathrm{CFS}<0) = $' + str(iscCfsNegatives))
+
+    # CFS as a function of time
+    plt.subplot(3, 2, 4)
+    ax = fig.gca()
+    ax.plot([0.0, 30.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            ax.plot((Catalog['datetime'][iIsc]-EventSrcmod['datetime']).days, 1e-6*Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            ax.plot((Catalog['datetime'][iIsc]-EventSrcmod['datetime']).days, 1e-6*Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$t \, \mathrm{(days)}$')
+    plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+
+    # CFS as a function of magnitude
+    plt.subplot(3, 2, 6)
+    ax = fig.gca()
+    ax.plot([3.0, 7.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        if (Catalog['cfs'][iIsc] > 0):
+            ax.plot(Catalog['magnitude'][iIsc], 1e-6*Catalog['cfs'][iIsc], marker='o', color='red', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+        else:
+            ax.plot(Catalog['magnitude'][iIsc], 1e-6*Catalog['cfs'][iIsc], marker='o', color='blue', linestyle='none',
+                    markerfacecoloralt='gray', markersize=5, alpha=1.0)
+    ax.set_xlim([3, 7])
+    ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$\mathrm{M_W}$')
+    plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.5)
+
+
 def main():
     # Name of Srcmod file to read
     fileName = 's1999HECTOR01SALI'
@@ -731,6 +840,13 @@ def main():
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
 
+    # Generate regular grid over region inside of fault buffer
+    xBuffer, yBuffer, polygonBuffer = calcFaultBuffer(EventSrcmod, nearFieldDistance)
+    xBufferFillGridVec, yBufferFillGridVec = calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid)
+
+    # Calculate displacement vector and stress tensor at observation coordinates
+    DisplacementVectorBuffer, StrainTensorBuffer, StressTensorBuffer = calcOkadaDisplacementStress(xBufferFillGridVec, yBufferFillGridVec, obsDepth + 0*xBufferFillGridVec, EventSrcmod, lambdaLame, muLame, useUtm)
+
     # Generate observation coordinates on a regular grid around epicenter
     obsX, obsY, obsZ = diskObservationPoints(obsDepth, EventSrcmod['epicenterXUtm'], EventSrcmod['epicenterYUtm'])
 
@@ -742,6 +858,8 @@ def main():
     Cfs['faultDip'] = EventSrcmod['dipMean']
     Cfs['nVecInPlane'], Cfs['nVecNormal'] = cfsVectorsFromAzimuth(Cfs['faultAzimuth'], Cfs['faultDip'])
     Cfs['cfs'] = calcCfs(StressTensor, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
+    Cfs['cfs'] = calcCfs(StressTensorBuffer, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
+
 
     # Read in ISC data for capture days after the date of the SRCMOD event
     startDateTime = EventSrcmod['datetime'] + datetime.timedelta(days=1) # Start day after event
@@ -769,24 +887,21 @@ def main():
 
     # Plot CFS with SRCMOD event and ISC events
     #plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog, obsDepth)
-    #plt.show()
-
-
-    # Generate regular grid over region inside of fault buffer
-    xBuffer, yBuffer, polygonBuffer = calcFaultBuffer(EventSrcmod, nearFieldDistance)
-    xBufferFillGridVec, yBufferFillGridVec = calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid)
-
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=0.5)
-    ax.plot(xBufferFillGridVec, yBufferFillGridVec, 'ro', linewidth=0.0)
-    ax.plot(xBuffer, yBuffer, 'go', linewidth=0.0)
-
-    ax.relim()
-    ax.autoscale()
-    plt.xlabel('x (m)')
-    plt.ylabel('y (m)')
-    plt.axis('equal')
+    plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xBufferFillGridVec, yBufferFillGridVec, Cfs, Catalog, obsDepth, xBuffer, yBuffer)
     plt.show()
+
+
+    # fig, ax = plt.subplots(figsize=(8, 8))
+    # ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=0.5)
+    # ax.plot(xBufferFillGridVec, yBufferFillGridVec, 'ro', linewidth=0.0)
+    # ax.plot(xBuffer, yBuffer, 'go', linewidth=0.0)
+
+    # ax.relim()
+    # ax.autoscale()
+    # plt.xlabel('x (m)')
+    # plt.ylabel('y (m)')
+    # plt.axis('equal')
+    # plt.show()
 
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
