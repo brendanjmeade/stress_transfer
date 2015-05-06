@@ -15,8 +15,7 @@ from matplotlib import cm
 # For buffering around fault shape
 from shapely.ops import cascaded_union
 from shapely.geometry import Point
-import random
-from matplotlib.patches import Polygon
+from shapely.geometry.polygon import Polygon
 
 
 # Function to check to see if a string can be converted into a float.  Useful for error checking.
@@ -680,11 +679,32 @@ def calcFaultBuffer(EventSrcmod, distance):
         circles.append(Point(EventSrcmod['x2Utm'][iPatch], EventSrcmod['y2Utm'][iPatch]).buffer(distance))
         circles.append(Point(EventSrcmod['x3Utm'][iPatch], EventSrcmod['y3Utm'][iPatch]).buffer(distance))
         circles.append(Point(EventSrcmod['x4Utm'][iPatch], EventSrcmod['y4Utm'][iPatch]).buffer(distance))
-    polygons = cascaded_union(circles)
-    temp = np.array(polygons.exterior).flatten()
+    polygonBuffer = cascaded_union(circles)
+    temp = np.array(polygonBuffer.exterior).flatten()
     xBuffer = temp[0::2]
     yBuffer = temp[1::2]
-    return(xBuffer, yBuffer)
+    # polygonBuffer = Polygon(polygonBuffer)
+    return(xBuffer, yBuffer, polygonBuffer)
+
+
+def calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid):
+    xBufferFillVec = np.arange(np.min(xBuffer), np.max(xBuffer), spacingGrid)
+    yBufferFillVec = np.arange(np.min(yBuffer), np.max(yBuffer), spacingGrid)
+    xBufferFillGrid, yBufferFillGrid = np.meshgrid(xBufferFillVec, yBufferFillVec)
+
+    # Select only those grid points inside of buffered region
+    xBufferFillGridVec = xBufferFillGrid.flatten()
+    yBufferFillGridVec = yBufferFillGrid.flatten()
+    deleteIdx = []
+    for iBufferFillGrid in range(0, len(xBufferFillGridVec)):
+       candidatePoint = Point(xBufferFillGridVec[iBufferFillGrid], yBufferFillGridVec[iBufferFillGrid])
+       isIn = polygonBuffer.contains(candidatePoint)
+       if isIn == False:
+           deleteIdx.append(iBufferFillGrid)
+
+    xBufferFillGridVec = np.delete(xBufferFillGridVec, deleteIdx)
+    yBufferFillGridVec = np.delete(yBufferFillGridVec, deleteIdx)
+    return(xBufferFillGridVec, yBufferFillGridVec)
 
 
 def main():
@@ -706,6 +726,7 @@ def main():
                              # 'EHB': many fewer earthquakes. Human quality control and precise relocations
     captureDays = 30 # Consider ISC earthquakes for this many days after day of main shock
     nearFieldDistance = 100e3 # Keep only those ISC earthquakes withing this disance of the SRCMOD epicenter
+    spacingGrid = 10e3
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
@@ -752,18 +773,19 @@ def main():
 
 
     # Generate regular grid over region inside of fault buffer
-    xBuffer, yBuffer = calcFaultBuffer(EventSrcmod, nearFieldDistance)
-    xBufferFillVec = np.arange(np.min(xBuffer), np.max(xBuffer), 2e3)
-    yBufferFillVec = np.arange(np.min(yBuffer), np.max(yBuffer), 2e3)
-    xBufferFillGrid, yBufferFillGrid = np.meshgrid(xBufferFillVec, yBufferFillVec)
-
+    xBuffer, yBuffer, polygonBuffer = calcFaultBuffer(EventSrcmod, nearFieldDistance)
+    xBufferFillGridVec, yBufferFillGridVec = calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid)
 
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=0.5)
-    ax.plot(xBufferFillGrid, yBufferFillGrid, 'ro', linewidth=0.0)
+    ax.plot(xBufferFillGridVec, yBufferFillGridVec, 'ro', linewidth=0.0)
+    ax.plot(xBuffer, yBuffer, 'go', linewidth=0.0)
 
     ax.relim()
     ax.autoscale()
+    plt.xlabel('x (m)')
+    plt.ylabel('y (m)')
+    plt.axis('equal')
     plt.show()
 
     # Provide keyboard control to interact with variables
