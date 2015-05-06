@@ -623,6 +623,30 @@ def getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod):
     return(Catalog)
 
 
+def getNearFieldIscEventsBuffer(Catalog, EventSrcmod, polygonBuffer):
+    # Convert longitude and latitudes to local UTM coordinates
+    Catalog['xUtm'], Catalog['yUtm'] = EventSrcmod['projEpicenter'](Catalog['longitude'], Catalog['latitude'])
+
+    # Determine whether or not the catalog events are withing the polygon buffer
+    deleteIdx = []
+    Catalog['distanceToEpicenter'] = []
+    for iIsc in range(0, len(Catalog['xUtm'])):
+        srcmodIscDistance = np.sqrt((Catalog['xUtm'][iIsc] - EventSrcmod['epicenterXUtm'])**2 + 
+                                    (Catalog['yUtm'][iIsc] - EventSrcmod['epicenterYUtm'])**2)
+        Catalog['distanceToEpicenter'].append(srcmodIscDistance)
+        candidatePoint = Point(Catalog['xUtm'][iIsc], Catalog['yUtm'][iIsc])
+        isIn = polygonBuffer.contains(candidatePoint)
+        if isIn == False:
+            deleteIdx.append(iIsc)
+
+    # Remove all catalog earthquakes that are not in field of interest from lists in dict Catalog
+    deleteIdx = sorted(deleteIdx, reverse=True)
+    for iKey in Catalog.keys():
+        for iDeleteIdx in range(0, len(deleteIdx)):
+            del Catalog[iKey][deleteIdx[iDeleteIdx]]
+    return(Catalog)
+
+
 def calcMaximumShear(tensor):
     # Calculate maximum shear (stress or strain) in three-dimensions.
     # Not yet visualized or checked.
@@ -683,7 +707,6 @@ def calcFaultBuffer(EventSrcmod, distance):
     temp = np.array(polygonBuffer.exterior).flatten()
     xBuffer = temp[0::2]
     yBuffer = temp[1::2]
-    # polygonBuffer = Polygon(polygonBuffer)
     return(xBuffer, yBuffer, polygonBuffer)
 
 
@@ -759,8 +782,8 @@ def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, 
                         orientation='horizontal', ticks=[-1e-1, 0, 1e-1]) # Make a colorbar for the ContourSet returned by the contourf call
     cbar.ax.set_xlabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
     cbar.ax.tick_params(length=0)
-    ax.set_xlim([np.min(xBuffer) - 10e3, np.max(xBuffer) + 10e3])
-    ax.set_ylim([np.min(yBuffer) - 10e3, np.max(yBuffer) + 10e3])
+    ax.set_xlim([np.min(xBuffer) - 20e3, np.max(xBuffer) + 20e3])
+    ax.set_ylim([np.min(yBuffer) - 20e3, np.max(yBuffer) + 20e3])
 
     # Plot CFS as a function of distance from SRCMOD epicenter
     plt.subplot(3, 2, 2)
@@ -835,7 +858,7 @@ def main():
                              # 'EHB': many fewer earthquakes. Human quality control and precise relocations
     captureDays = 30 # Consider ISC earthquakes for this many days after day of main shock
     nearFieldDistance = 100e3 # Keep only those ISC earthquakes withing this disance of the SRCMOD epicenter
-    spacingGrid = 10e3
+    spacingGrid = 2e3
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
@@ -843,6 +866,10 @@ def main():
     # Generate regular grid over region inside of fault buffer
     xBuffer, yBuffer, polygonBuffer = calcFaultBuffer(EventSrcmod, nearFieldDistance)
     xBufferFillGridVec, yBufferFillGridVec = calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid)
+
+    # Append boundary coordinates to filled buffer for nice plotting
+    xBufferFillGridVec = np.append(xBufferFillGridVec, xBuffer)
+    yBufferFillGridVec = np.append(yBufferFillGridVec, yBuffer)
 
     # Calculate displacement vector and stress tensor at observation coordinates
     DisplacementVectorBuffer, StrainTensorBuffer, StressTensorBuffer = calcOkadaDisplacementStress(xBufferFillGridVec, yBufferFillGridVec, obsDepth + 0*xBufferFillGridVec, EventSrcmod, lambdaLame, muLame, useUtm)
@@ -860,12 +887,12 @@ def main():
     Cfs['cfs'] = calcCfs(StressTensor, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
     Cfs['cfs'] = calcCfs(StressTensorBuffer, Cfs['nVecNormal'], Cfs['nVecInPlane'], coefficientOfFriction)
 
-
     # Read in ISC data for capture days after the date of the SRCMOD event
     startDateTime = EventSrcmod['datetime'] + datetime.timedelta(days=1) # Start day after event
     endDateTime = startDateTime + datetime.timedelta(days=captureDays) - datetime.timedelta(seconds=1)
     Catalog = getIscEventCatalog(startDateTime, endDateTime, catalogType) # Read ISC events
-    Catalog = getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod)
+    #Catalog = getNearFieldIscEvents(Catalog, nearFieldDistance, EventSrcmod)
+    Catalog = getNearFieldIscEventsBuffer(Catalog, EventSrcmod, polygonBuffer)
 
     # Calculate Coulomb failure stress at ISC event locations
     Catalog['cfs'] = []
@@ -889,19 +916,6 @@ def main():
     #plotSrcmodStressAndEarthquakes(EventSrcmod, obsX, obsY, Cfs, Catalog, obsDepth)
     plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xBufferFillGridVec, yBufferFillGridVec, Cfs, Catalog, obsDepth, xBuffer, yBuffer)
     plt.show()
-
-
-    # fig, ax = plt.subplots(figsize=(8, 8))
-    # ax.plot(xBuffer, yBuffer, color=[0.0, 0.0, 0.0], linewidth=0.5)
-    # ax.plot(xBufferFillGridVec, yBufferFillGridVec, 'ro', linewidth=0.0)
-    # ax.plot(xBuffer, yBuffer, 'go', linewidth=0.0)
-
-    # ax.relim()
-    # ax.autoscale()
-    # plt.xlabel('x (m)')
-    # plt.ylabel('y (m)')
-    # plt.axis('equal')
-    # plt.show()
 
     # Provide keyboard control to interact with variables
     code.interact(local=locals())
