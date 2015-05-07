@@ -732,6 +732,7 @@ def calcBufferGridPoints(xBuffer, yBuffer, polygonBuffer, spacingGrid):
 
 def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, obsDepth, xBuffer, yBuffer):
     # Clip CFS values for plotting purposes
+    Cfs['cfsRaw'] = Cfs['cfs'].copy()
     cfsHighIdx1 = (Cfs['cfs']>Cfs['cfsUpperLimit']).nonzero()
     cfsHighIdx2 = (Cfs['cfs']>0).nonzero()
     cfsHighIdx = np.intersect1d(np.array(cfsHighIdx1), np.array(cfsHighIdx2))
@@ -742,9 +743,10 @@ def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, 
     Cfs['cfs'][cfsLowIdx] = Cfs['cfsLowerLimit']
 
     # Generate figure showing fault geometry and CFS field
-    fig = plt.figure(facecolor='white', figsize=(10, 6), dpi=100)
+    fig = plt.figure(facecolor='white', figsize=(10, 8), dpi=100)
     plt.subplot(1, 2, 1)
     ax = fig.gca()
+    # Both of these contouring calls are plotting (erronously) in some concave regions for some reason???
     cs = plt.tricontourf(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 10, cmap=cm.bwr, origin='lower', hold='on', extend='both')
     cs2 = plt.tricontour(xVec.flatten(), yVec.flatten(), 1e-6*Cfs['cfs'].flatten(), 0, linewidths=1.0, colors='k', origin='lower', hold='on')
 
@@ -786,7 +788,7 @@ def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, 
     ax.set_ylim([np.min(yBuffer) - 20e3, np.max(yBuffer) + 20e3])
 
     # Plot CFS as a function of distance from SRCMOD epicenter
-    plt.subplot(3, 2, 2)
+    plt.subplot(4, 2, 2)
     ax = fig.gca()
     ax.plot([3.0, 5.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
     iscCfsPositives = 0
@@ -807,7 +809,7 @@ def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, 
     plt.title(r'$N(\Delta\mathrm{CFS}>0) = $' + str(iscCfsPositives) + ', $N(\Delta\mathrm{CFS}<0) = $' + str(iscCfsNegatives))
 
     # CFS as a function of time
-    plt.subplot(3, 2, 4)
+    plt.subplot(4, 2, 4)
     ax = fig.gca()
     ax.plot([0.0, 30.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
     for iIsc in range(0, len(Catalog['xUtm'])):
@@ -822,7 +824,7 @@ def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, 
     plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
 
     # CFS as a function of magnitude
-    plt.subplot(3, 2, 6)
+    plt.subplot(4, 2, 6)
     ax = fig.gca()
     ax.plot([3.0, 7.0], [0.0, 0.0], marker=' ', color='k', linestyle='-', alpha=1.0)
     for iIsc in range(0, len(Catalog['xUtm'])):
@@ -836,6 +838,17 @@ def plotSrcmodStressAndEarthquakesBuffer(EventSrcmod, xVec, yVec, Cfs, Catalog, 
     ax.set_ylim([-0.5e2, 0.5e2])
     plt.xlabel(r'$\mathrm{M_W}$')
     plt.ylabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.5)
+
+    # Histogram of field frequencies
+    plt.subplot(4, 2, 8)
+    ax = fig.gca()
+    plt.hist(Cfs['cfsRaw'], bins=30, range=[-5e4, 5e4])
+    # ax.set_xlim([3, 7])
+    # ax.set_ylim([-0.5e2, 0.5e2])
+    plt.xlabel(r'$\Delta \mathrm{CFS} \, \mathrm{(MPa)}$')
+    plt.ylabel(r'$N$')
+
     plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.5)
 
 
@@ -858,7 +871,7 @@ def main():
                              # 'EHB': many fewer earthquakes. Human quality control and precise relocations
     captureDays = 30 # Consider ISC earthquakes for this many days after day of main shock
     nearFieldDistance = 100e3 # Keep only those ISC earthquakes withing this disance of the SRCMOD epicenter
-    spacingGrid = 2e3
+    spacingGrid = 10e3
 
     # Read in Srcmod fault geometry and slip distribution for this representation of the event
     EventSrcmod = readSrcmodFile(fileName)
